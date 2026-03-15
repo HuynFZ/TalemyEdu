@@ -42,3 +42,8 @@ npm install -g firebase-tools
 firebase login
 ```
 (Đăng nhập bằng chính email mà Huy đã mời ở Bước 2).
+
+## 6. Cài đặt biểu đồ 
+```cmd
+docker-compose exec frontend npm install recharts
+```
