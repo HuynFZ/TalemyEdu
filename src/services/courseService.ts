@@ -10,7 +10,7 @@ import {
 } from 'firebase/firestore';
 
 // 1. Định nghĩa Interface dựa trên Schema và UI thực tế
-export interface Course Data {
+export interface CourseData {
   id?: string;
   name: string;
   description: string;
