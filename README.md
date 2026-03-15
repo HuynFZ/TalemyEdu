@@ -26,7 +26,18 @@ cd TalemyEdu
 ```cmd
 docker-compose up -d
 ```
-## 3. Đăng nhập firebase:
+## 3. Cài đặt thư viện:
+```cmd
+docker-compose exec frontend npm install
+```
+
+## 4. Đăng nhập để lấy quyền truy cập Database
+```cmd
+# Cài công cụ Firebase nếu chưa có (cài trên máy thật)
+npm install -g firebase-tools
+```
+
+## 5. Đăng nhập firebase:
 ```cmd
 firebase login
 ```
