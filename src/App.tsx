@@ -8,7 +8,6 @@ import { AuthProvider, useAuth, Role } from './context/AuthContext';
 import Login from './features/Login';
 import Dashboard from './features/Dashboard';
 import Finance from './features/Finance';
-import LeadManagement from './features/LeadManagement';
 
 // 1. Định nghĩa Interface cho Menu
 interface MenuItem {
@@ -18,7 +17,34 @@ interface MenuItem {
     roles: Role[];
 }
 
-// Định nghĩa Interface Lead khớp với Database ảnh của bạn
+// 2. Danh sách Menu với phân quyền
+const menuItems: MenuItem[] = [
+    {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: <LayoutDashboard size={20} />,
+        roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] // Tất cả đều thấy
+    },
+    {
+        id: 'pipeline',
+        label: 'Sales Pipeline',
+        icon: <BarChart3 size={20} />,
+        roles: ['admin', 'sale'] // Chỉ Admin và Sales được vào chốt đơn
+    },
+    {
+        id: 'students',
+        label: 'Course',
+        icon: <GraduationCap size={20} />,
+        roles: ['admin', 'teacher', 'pt'] // Teacher và PT dùng chung để quản lý lớp
+    },
+    {
+        id: 'finance',
+        label: 'Finance',
+        icon: <CreditCard size={20} />,
+        roles: ['admin', 'finance'] // Chỉ Admin và Kế toán
+    },
+];
+
 interface Lead {
     id: string;
     name: string;
@@ -65,8 +91,35 @@ function MainApp() {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
             case 'finance': return <Finance />;
-            case 'pipeline': return <LeadManagement leads={leads} />;
-            default: return <div className="p-10 text-slate-400 italic">Tính năng {activeTab} đang phát triển...</div>;
+            case 'pipeline':
+                return (
+                    <div className="p-8">
+                        <h2 className="text-2xl font-black mb-6 text-slate-800">Sales Pipeline</h2>
+                        <div className="flex gap-6 overflow-x-auto pb-6">
+                            {["New", "Contacted", "Trial", "Enrolled"].map(status => (
+                                <div key={status} className="min-w-[300px] flex flex-col bg-slate-200/50 rounded-2xl p-4 border border-slate-200">
+                                    <div className="flex justify-between mb-4 px-2 italic text-slate-500 text-xs font-bold uppercase tracking-widest">
+                                        {status} ({leads.filter(l => l.status === status).length})
+                                    </div>
+                                    <div className="space-y-3">
+                                        {leads.filter(l => l.status === status).map(lead => (
+                                            <div key={lead.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                                <p className="font-bold text-sm text-slate-800">{lead.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">{lead.course}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="flex items-center justify-center h-full text-slate-400 italic">
+                        Tính năng {activeTab} đang phát triển...
+                    </div>
+                );
         }
     };
 
