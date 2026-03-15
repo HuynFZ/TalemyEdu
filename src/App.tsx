@@ -1,55 +1,102 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, Plus, LogOut } from 'lucide-react';
+import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut } from 'lucide-react';
 import { db } from './firebase';
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
-// 1. Import trang Dashboard (Giả sử bạn để file ở src/features/Dashboard.tsx)
+// Import Auth và các trang tính năng
+import { AuthProvider, useAuth, Role } from './context/AuthContext';
+import Login from './features/Login';
 import Dashboard from './features/Dashboard';
+import Finance from './features/Finance';
+
+// 1. Định nghĩa Interface cho Menu
+interface MenuItem {
+    id: string;
+    label: string;
+    icon: React.ReactNode;
+    roles: Role[];
+}
+
+// 2. Danh sách Menu với phân quyền
+const menuItems: MenuItem[] = [
+    {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: <LayoutDashboard size={20} />,
+        roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] // Tất cả đều thấy
+    },
+    {
+        id: 'pipeline',
+        label: 'Sales Pipeline',
+        icon: <BarChart3 size={20} />,
+        roles: ['admin', 'sale'] // Chỉ Admin và Sales được vào chốt đơn
+    },
+    {
+        id: 'students',
+        label: 'Course',
+        icon: <GraduationCap size={20} />,
+        roles: ['admin', 'teacher', 'pt'] // Teacher và PT dùng chung để quản lý lớp
+    },
+    {
+        id: 'finance',
+        label: 'Finance',
+        icon: <CreditCard size={20} />,
+        roles: ['admin', 'finance'] // Chỉ Admin và Kế toán
+    },
+];
 
 interface Lead {
     id: string;
     name: string;
     status: string;
     course: string;
-    source: string;
 }
 
-function App() {
-    const [activeTab, setActiveTab] = useState<string>('dashboard'); // Mặc định mở Dashboard
+function MainApp() {
+    const { user, logout } = useAuth();
+    const [activeTab, setActiveTab] = useState<string>('dashboard');
     const [leads, setLeads] = useState<Lead[]>([]);
 
+    // Lắng nghe Firebase cho phần Pipeline
     useEffect(() => {
+        if (!user) return;
         const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Lead[];
             setLeads(data);
         });
         return () => unsubscribe();
-    }, []);
+    }, [user]);
 
-    const menuItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-        { id: 'pipeline', label: 'Sales Pipeline', icon: <BarChart3 size={20} /> },
-        { id: 'students', label: 'Học viên (LMS)', icon: <GraduationCap size={20} /> },
-        { id: 'finance', label: 'Tài chính', icon: <CreditCard size={20} /> },
-    ];
+    // Nếu chưa đăng nhập -> Hiện màn hình Login
+    if (!user) return <Login />;
 
-    // 2. Hàm render nội dung theo Tab
+    // Lọc menu theo quyền
+    const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
+
+    // Hàm render nội dung chính
     const renderContent = () => {
         switch (activeTab) {
-            case 'dashboard':
-                return <Dashboard />;
+            case 'dashboard': return <Dashboard />;
+            case 'finance': return <Finance />;
             case 'pipeline':
                 return (
                     <div className="p-8">
-                        <h2 className="text-2xl font-black mb-6">Sales Pipeline</h2>
+                        <h2 className="text-2xl font-black mb-6 text-slate-800">Sales Pipeline</h2>
                         <div className="flex gap-6 overflow-x-auto pb-6">
                             {["New", "Contacted", "Trial", "Enrolled"].map(status => (
-                                <div key={status} className="min-w-[300px] bg-slate-200/50 rounded-2xl p-4 border border-slate-200">
-                                    <div className="flex justify-between mb-4 px-2 italic text-slate-500 text-xs font-bold uppercase">
+                                <div key={status} className="min-w-[300px] flex flex-col bg-slate-200/50 rounded-2xl p-4 border border-slate-200">
+                                    <div className="flex justify-between mb-4 px-2 italic text-slate-500 text-xs font-bold uppercase tracking-widest">
                                         {status} ({leads.filter(l => l.status === status).length})
                                     </div>
-                                    {/* List leads here... */}
+                                    <div className="space-y-3">
+                                        {leads.filter(l => l.status === status).map(lead => (
+                                            <div key={lead.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+                                                <p className="font-bold text-sm text-slate-800">{lead.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">{lead.course}</p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -58,7 +105,7 @@ function App() {
             default:
                 return (
                     <div className="flex items-center justify-center h-full text-slate-400 italic">
-                        Tính năng {activeTab} đang được phát triển...
+                        Tính năng {activeTab} đang phát triển...
                     </div>
                 );
         }
@@ -66,20 +113,20 @@ function App() {
 
     return (
         <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
-            {/* Sidebar màu Cam-Trắng đồng bộ */}
+            {/* Sidebar */}
             <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm">
                 <div className="p-8 flex items-center gap-3">
                     <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200">
                         <GraduationCap className="text-white" size={24} />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black text-slate-800 tracking-tight leading-none">Talemy</h1>
+                        <h1 className="text-xl font-black text-slate-800">Talemy</h1>
                         <p className="text-[10px] uppercase tracking-[0.2em] text-orange-500 font-bold mt-1">Management</p>
                     </div>
                 </div>
 
                 <nav className="flex-1 px-4 space-y-2">
-                    {menuItems.map((item) => (
+                    {filteredMenu.map((item) => (
                         <button
                             key={item.id}
                             onClick={() => setActiveTab(item.id)}
@@ -95,24 +142,24 @@ function App() {
                     ))}
                 </nav>
 
-                {/* User Profile Area */}
+                {/* User Profile Footer */}
                 <div className="p-4 mt-auto border-t border-slate-100">
                     <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
                         <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center font-bold text-orange-600">
-                            H
+                            {user.name.charAt(0)}
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            <p className="text-sm font-bold text-slate-800 truncate">Huy Nguyễn</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Administrator</p>
+                            <p className="text-sm font-bold text-slate-800 truncate">{user.name}</p>
+                            <p className="text-[10px] text-slate-500 font-medium uppercase">{user.role}</p>
                         </div>
-                        <button className="text-slate-400 hover:text-red-500">
+                        <button onClick={logout} className="text-slate-400 hover:text-red-500 transition-colors">
                             <LogOut size={18} />
                         </button>
                     </div>
                 </div>
             </aside>
 
-            {/* Main View Area */}
+            {/* Main Content */}
             <main className="flex-1 overflow-hidden relative">
                 {renderContent()}
             </main>
@@ -120,4 +167,11 @@ function App() {
     );
 }
 
-export default App;
+// Xuất file bọc trong AuthProvider
+export default function App() {
+    return (
+        <AuthProvider>
+            <MainApp />
+        </AuthProvider>
+    );
+}
