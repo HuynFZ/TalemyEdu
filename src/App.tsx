@@ -1,54 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, Plus } from 'lucide-react';
+import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, Plus, LogOut } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, onSnapshot, query, serverTimestamp, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
-// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU (INTERFACE) ---
-// Giúp Ngọc và Khang biết rõ Lead gồm những gì
+// 1. Import trang Dashboard (Giả sử bạn để file ở src/features/Dashboard.tsx)
+import Dashboard from './features/Dashboard';
+
 interface Lead {
     id: string;
     name: string;
     status: string;
     course: string;
     source: string;
-    createdAt?: any;
 }
 
 function App() {
-    const [activeTab, setActiveTab] = useState<string>('pipeline');
-    const [leads, setLeads] = useState<Lead[]>([]); // Khai báo đây là mảng các Lead
-    const [loading, setLoading] = useState<boolean>(false);
+    const [activeTab, setActiveTab] = useState<string>('dashboard'); // Mặc định mở Dashboard
+    const [leads, setLeads] = useState<Lead[]>([]);
 
-    // 1. Lắng nghe dữ liệu Real-time từ Firebase
     useEffect(() => {
         const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            })) as Lead[]; // Ép kiểu dữ liệu về mảng Lead
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Lead[];
             setLeads(data);
         });
         return () => unsubscribe();
     }, []);
-
-    // 2. Hàm Test kết nối
-    const handleAddTestLead = async () => {
-        setLoading(true);
-        try {
-            await addDoc(collection(db, "leads"), {
-                name: `Học viên ${Math.floor(Math.random() * 1000)}`,
-                status: "New",
-                course: "IELTS Special",
-                source: "Facebook Ads",
-                createdAt: serverTimestamp()
-            });
-        } catch (e: any) {
-            alert("Lỗi kết nối Firebase: " + e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
@@ -57,76 +34,87 @@ function App() {
         { id: 'finance', label: 'Tài chính', icon: <CreditCard size={20} /> },
     ];
 
+    // 2. Hàm render nội dung theo Tab
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'dashboard':
+                return <Dashboard />;
+            case 'pipeline':
+                return (
+                    <div className="p-8">
+                        <h2 className="text-2xl font-black mb-6">Sales Pipeline</h2>
+                        <div className="flex gap-6 overflow-x-auto pb-6">
+                            {["New", "Contacted", "Trial", "Enrolled"].map(status => (
+                                <div key={status} className="min-w-[300px] bg-slate-200/50 rounded-2xl p-4 border border-slate-200">
+                                    <div className="flex justify-between mb-4 px-2 italic text-slate-500 text-xs font-bold uppercase">
+                                        {status} ({leads.filter(l => l.status === status).length})
+                                    </div>
+                                    {/* List leads here... */}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="flex items-center justify-center h-full text-slate-400 italic">
+                        Tính năng {activeTab} đang được phát triển...
+                    </div>
+                );
+        }
+    };
+
     return (
-        <div className="flex h-screen bg-slate-100 font-sans text-slate-900">
-            {/* Sidebar giữ nguyên logic cũ nhưng thêm kiểu dữ liệu */}
-            <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
-                <div className="p-6 border-b border-slate-100">
-                    <h1 className="text-2xl font-black text-blue-600 tracking-tight">TalemyEdu</h1>
-                    <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">Internal Management</p>
+        <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
+            {/* Sidebar màu Cam-Trắng đồng bộ */}
+            <aside className="w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+                <div className="p-8 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200">
+                        <GraduationCap className="text-white" size={24} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-black text-slate-800 tracking-tight leading-none">Talemy</h1>
+                        <p className="text-[10px] uppercase tracking-[0.2em] text-orange-500 font-bold mt-1">Management</p>
+                    </div>
                 </div>
-                <nav className="flex-1 p-4 space-y-1">
+
+                <nav className="flex-1 px-4 space-y-2">
                     {menuItems.map((item) => (
                         <button
                             key={item.id}
                             onClick={() => setActiveTab(item.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                                activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:bg-slate-50'
+                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-bold ${
+                                activeTab === item.id
+                                    ? 'bg-orange-500 text-white shadow-xl shadow-orange-100'
+                                    : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'
                             }`}
                         >
                             {item.icon}
-                            <span className="font-semibold">{item.label}</span>
+                            <span>{item.label}</span>
                         </button>
                     ))}
                 </nav>
+
+                {/* User Profile Area */}
+                <div className="p-4 mt-auto border-t border-slate-100">
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+                        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center font-bold text-orange-600">
+                            H
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-sm font-bold text-slate-800 truncate">Huy Nguyễn</p>
+                            <p className="text-[10px] text-slate-500 font-medium">Administrator</p>
+                        </div>
+                        <button className="text-slate-400 hover:text-red-500">
+                            <LogOut size={18} />
+                        </button>
+                    </div>
+                </div>
             </aside>
 
-            <main className="flex-1 flex flex-col overflow-hidden">
-                <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-                    <h2 className="text-xl font-bold capitalize">{activeTab} View</h2>
-                    <button
-                        onClick={handleAddTestLead}
-                        disabled={loading}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-full font-bold shadow-md transition-all active:scale-95 disabled:opacity-50"
-                    >
-                        {loading ? "Đang gửi..." : <><Plus size={18} /> Thêm Lead Test</>}
-                    </button>
-                </header>
-
-                <div className="flex-1 overflow-auto p-8">
-                    {activeTab === 'pipeline' ? (
-                        <div className="flex gap-6 h-full overflow-x-auto pb-6">
-                            {["New", "Contacted", "Trial", "Enrolled"].map(status => (
-                                <div key={status} className="min-w-[300px] flex flex-col bg-slate-200/50 rounded-2xl p-4 border border-slate-200">
-                                    <div className="flex justify-between items-center mb-4 px-2">
-                                        <span className="font-bold text-slate-600 uppercase text-xs tracking-wider">{status}</span>
-                                        <span className="bg-white text-blue-600 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm">
-                                            {leads.filter(l => l.status === status).length}
-                                        </span>
-                                    </div>
-                                    <div className="space-y-3 flex-1 overflow-y-auto">
-                                        {leads.filter(l => l.status === status).map(lead => (
-                                            <div key={lead.id} className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow group">
-                                                <div className="flex justify-between items-start">
-                                                    <h4 className="font-bold text-slate-800">{lead.name}</h4>
-                                                    <span className="text-[10px] bg-blue-50 text-blue-500 px-2 py-0.5 rounded-md font-bold">{lead.source}</span>
-                                                </div>
-                                                <p className="text-xs text-slate-500 mt-2 font-medium">Khóa học: {lead.course}</p>
-                                                <div className="mt-4 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button className="text-blue-600 text-xs font-bold underline">Chi tiết</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-slate-400 italic">
-                            Tính năng {activeTab} đang được Ngọc và Khang phát triển...
-                        </div>
-                    )}
-                </div>
+            {/* Main View Area */}
+            <main className="flex-1 overflow-hidden relative">
+                {renderContent()}
             </main>
         </div>
     );
