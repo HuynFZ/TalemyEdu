@@ -8,7 +8,7 @@ import { AuthProvider, useAuth, Role } from './context/AuthContext';
 import Login from './features/Login';
 import Dashboard from './features/Dashboard';
 import Finance from './features/Finance';
-
+import Course from './features/Course';
 // 1. Định nghĩa Interface cho Menu
 interface MenuItem {
     id: string;
@@ -32,7 +32,7 @@ const menuItems: MenuItem[] = [
         roles: ['admin', 'sale'] // Chỉ Admin và Sales được vào chốt đơn
     },
     {
-        id: 'students',
+        id: 'course',
         label: 'Course',
         icon: <GraduationCap size={20} />,
         roles: ['admin', 'teacher', 'pt'] // Teacher và PT dùng chung để quản lý lớp
@@ -79,6 +79,7 @@ function MainApp() {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
             case 'finance': return <Finance />;
+            case 'course': return <Course />;
             case 'pipeline':
                 return (
                     <div className="p-8">
