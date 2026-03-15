@@ -1,0 +1,10 @@
+services:
+  frontend:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules # Giữ node_modules trong container để không bị xung đột với máy thật
+    environment:
+      - CHOKIDAR_USEPOLLING=true
