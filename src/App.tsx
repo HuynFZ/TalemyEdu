@@ -1,24 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, CreditCard, GraduationCap, BarChart3, Plus, Send } from 'lucide-react';
+import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, Plus } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, onSnapshot, query, serverTimestamp, orderBy } from "firebase/firestore";
 
+// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU (INTERFACE) ---
+// Giúp Ngọc và Khang biết rõ Lead gồm những gì
+interface Lead {
+    id: string;
+    name: string;
+    status: string;
+    course: string;
+    source: string;
+    createdAt?: any;
+}
+
 function App() {
-    const [activeTab, setActiveTab] = useState('pipeline');
-    const [leads, setLeads] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<string>('pipeline');
+    const [leads, setLeads] = useState<Lead[]>([]); // Khai báo đây là mảng các Lead
+    const [loading, setLoading] = useState<boolean>(false);
 
     // 1. Lắng nghe dữ liệu Real-time từ Firebase
     useEffect(() => {
         const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const data = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Lead[]; // Ép kiểu dữ liệu về mảng Lead
             setLeads(data);
         });
         return () => unsubscribe();
     }, []);
 
-    // 2. Hàm Test kết nối - Ghi dữ liệu
+    // 2. Hàm Test kết nối
     const handleAddTestLead = async () => {
         setLoading(true);
         try {
@@ -29,7 +43,7 @@ function App() {
                 source: "Facebook Ads",
                 createdAt: serverTimestamp()
             });
-        } catch (e) {
+        } catch (e: any) {
             alert("Lỗi kết nối Firebase: " + e.message);
         } finally {
             setLoading(false);
@@ -45,7 +59,7 @@ function App() {
 
     return (
         <div className="flex h-screen bg-slate-100 font-sans text-slate-900">
-            {/* Sidebar */}
+            {/* Sidebar giữ nguyên logic cũ nhưng thêm kiểu dữ liệu */}
             <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
                 <div className="p-6 border-b border-slate-100">
                     <h1 className="text-2xl font-black text-blue-600 tracking-tight">TalemyEdu</h1>
@@ -67,7 +81,6 @@ function App() {
                 </nav>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8">
                     <h2 className="text-xl font-bold capitalize">{activeTab} View</h2>
@@ -88,8 +101,8 @@ function App() {
                                     <div className="flex justify-between items-center mb-4 px-2">
                                         <span className="font-bold text-slate-600 uppercase text-xs tracking-wider">{status}</span>
                                         <span className="bg-white text-blue-600 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm">
-                      {leads.filter(l => l.status === status).length}
-                    </span>
+                                            {leads.filter(l => l.status === status).length}
+                                        </span>
                                     </div>
                                     <div className="space-y-3 flex-1 overflow-y-auto">
                                         {leads.filter(l => l.status === status).map(lead => (
