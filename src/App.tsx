@@ -1,7 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut } from 'lucide-react';
-import { db } from './firebase';
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 
 // Import Auth và các trang tính năng
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
@@ -19,20 +17,7 @@ interface MenuItem {
     roles: Role[];
 }
 
-// Interface Lead khớp với Database Firebase
-interface Lead {
-    id: string;
-    name: string;
-    phone: string;
-    email?: string;
-    status: string;
-    course: string;
-    source?: string;
-    note?: string;
-    create_at?: any; 
-}
-
-// 2. Danh sách Menu (CHỈ KHAI BÁO 1 LẦN Ở ĐÂY)
+// 2. Danh sách Menu
 const menuItems: MenuItem[] = [
     {
         id: 'dashboard',
@@ -63,21 +48,6 @@ const menuItems: MenuItem[] = [
 function MainApp() {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState<string>('dashboard');
-    const [leads, setLeads] = useState<Lead[]>([]);
-
-    useEffect(() => {
-        if (!user) return;
-        // Query dữ liệu từ collection "leads" sắp xếp theo create_at
-        const q = query(collection(db, "leads"), orderBy("create_at", "desc"));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ 
-                id: doc.id, 
-                ...doc.data() 
-            })) as Lead[];
-            setLeads(data);
-        });
-        return () => unsubscribe();
-    }, [user]);
 
     if (!user) return <Login />;
 
@@ -88,7 +58,7 @@ function MainApp() {
             case 'dashboard': return <Dashboard />;
             case 'finance': return <Finance />;
             case 'course': return <Course />;
-            case 'pipeline': return <LeadManagement leads={leads} />;
+            case 'pipeline': return <LeadManagement />; // Đã sửa lỗi ở đây: Xóa leads={leads}
             default:
                 return (
                     <div className="flex items-center justify-center h-full text-slate-400 italic">
