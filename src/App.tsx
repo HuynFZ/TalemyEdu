@@ -8,6 +8,8 @@ import LeadManagement from './features/LeadManagement';
 import Course from './features/Course';
 import { Users as UsersIcon } from 'lucide-react';
 import StaffManagement from './features/StaffManagement';
+import { UserCircle } from 'lucide-react';
+import Information from './features/Information';
 
 interface MenuItem {
     id: string;
@@ -26,7 +28,13 @@ const menuItems: MenuItem[] = [
         label: 'Staff',
         icon: <UsersIcon size={20} />,
         roles: ['admin'] // Chỉ admin mới được quản lý nhân viên
-    }
+    },
+    {
+        id: 'info',
+        label: 'Infomation',
+        icon: <UserCircle size={20} />,
+        roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] // Tất cả mọi người đều xem được
+    },
 ];
 
 function MainApp() {
@@ -41,6 +49,7 @@ function MainApp() {
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
+            case 'info': return <Information />;
             case 'staff': return <StaffManagement />;
             case 'finance': return <Finance />;
             case 'course': return <Course />;
