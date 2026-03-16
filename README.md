@@ -51,3 +51,8 @@ docker-compose exec frontend npm install recharts
 ```cmd
  npm install @hello-pangea/dnd
 ```
+
+## 8. Cài đặt thư viện EmailJS
+```cmd
+ npm install @emailjs/browser
+```

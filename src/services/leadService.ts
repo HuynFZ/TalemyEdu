@@ -1,7 +1,7 @@
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 
-// 1. Thêm isTestSent vào Interface
+// 1. Cập nhật Interface: Bỏ isTestSent, thêm đếm số lần và thời gian
 export interface LeadData {
   id?: string;
   name: string;
@@ -12,7 +12,8 @@ export interface LeadData {
   source?: string;
   note?: string;
   create_at?: any;
-  isTestSent?: boolean; // THÊM DÒNG NÀY: Để biết đã gửi test hay chưa
+  testRemindCount?: number;     // Số lần đã gửi/nhắc lịch test
+  lastTestRemindedAt?: any;     // Thời gian nhắc gần nhất
 }
 
 const COLLECTION_NAME = "leads";
@@ -29,7 +30,8 @@ export const createLead = async (leadData: Omit<LeadData, 'id' | 'create_at'>) =
   try {
     const docRef = await addDoc(collection(db, COLLECTION_NAME), {
       ...leadData,
-      isTestSent: false, // Mặc định khi tạo mới là chưa gửi
+      testRemindCount: 0,        // Mặc định lúc tạo mới là 0
+      lastTestRemindedAt: null,
       create_at: serverTimestamp()
     });
     return docRef.id;
@@ -47,13 +49,38 @@ export const updateLeadStatus = async (leadId: string, newStatus: string) => {
   }
 };
 
-// THÊM HÀM NÀY: Hàm đánh dấu là đã gửi test
-export const markTestAsSent = async (leadId: string) => {
+// Hàm xử lý khi bấm Gửi/Nhắc lịch Test
+export const sendTestSchedule = async (leadId: string, currentCount: number) => {
   try {
     const leadRef = doc(db, COLLECTION_NAME, leadId);
-    await updateDoc(leadRef, { isTestSent: true });
+    await updateDoc(leadRef, { 
+        testRemindCount: currentCount + 1,        // Tăng số lần nhắc lên 1
+        lastTestRemindedAt: serverTimestamp()     // Lưu thời gian hiện tại
+    });
   } catch (error) {
     console.error("Lỗi cập nhật test:", error);
+    throw error;
+  }
+};
+
+// Hàm cập nhật Lead
+export const updateLead = async (id: string, updateData: any) => {
+  try {
+    const leadRef = doc(db, "leads", id);
+    await updateDoc(leadRef, updateData);
+  } catch (error) {
+    console.error("Lỗi khi cập nhật lead:", error);
+    throw error;
+  }
+};
+
+// Hàm xóa Lead
+export const deleteLead = async (id: string) => {
+  try {
+    const leadRef = doc(db, "leads", id);
+    await deleteDoc(leadRef);
+  } catch (error) {
+    console.error("Lỗi khi xóa lead:", error);
     throw error;
   }
 };
