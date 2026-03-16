@@ -6,6 +6,8 @@ import Dashboard from './features/Dashboard';
 import Finance from './features/Finance';
 import LeadManagement from './features/LeadManagement';
 import Course from './features/Course';
+import { Users as UsersIcon } from 'lucide-react';
+import StaffManagement from './features/StaffManagement';
 
 interface MenuItem {
     id: string;
@@ -19,6 +21,12 @@ const menuItems: MenuItem[] = [
     { id: 'pipeline', label: 'Sales Pipeline', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
     { id: 'course', label: 'Course', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
     { id: 'finance', label: 'Finance', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
+    {
+        id: 'staff',
+        label: 'Staff',
+        icon: <UsersIcon size={20} />,
+        roles: ['admin'] // Chỉ admin mới được quản lý nhân viên
+    }
 ];
 
 function MainApp() {
@@ -33,6 +41,7 @@ function MainApp() {
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
+            case 'staff': return <StaffManagement />;
             case 'finance': return <Finance />;
             case 'course': return <Course />;
             case 'pipeline': return <LeadManagement />;
