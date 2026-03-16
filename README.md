@@ -47,3 +47,7 @@ firebase login
 ```cmd
 docker-compose exec frontend npm install recharts
 ```
+## 7. Cài đặt thư viện Kanban
+```cmd
+ npm install @hello-pangea/dnd
+```

@@ -51,25 +51,20 @@ const StatCard = ({ title, value, icon: Icon, colorClass, trend }: any) => (
 
 const Dashboard = () => {
     return (
-        <div className="p-8 bg-slate-50 min-h-screen">
-            {/* Header Area */}
-            <div className="flex justify-between items-center mb-8">
+        <div className="p-4 md:p-8 bg-slate-50 min-h-screen">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800">Dashboard Tổng Quan</h2>
-                    <p className="text-slate-500 text-sm">Chào mừng quay trở lại, Huy Nguyễn!</p>
+                    <h2 className="text-xl md:text-2xl font-black text-slate-800">Dashboard Tổng Quan</h2>
+                    <p className="text-slate-500 text-sm">Chào Huy Nguyễn!</p>
                 </div>
-                <div className="flex gap-3">
-                    <button className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-50">
-                        Xuất báo cáo
-                    </button>
-                    <button className="bg-orange-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg shadow-orange-200 hover:bg-orange-600 transition-all">
-                        + Thêm dữ liệu
-                    </button>
+                <div className="flex gap-2 w-full md:w-auto">
+                    <button className="flex-1 md:flex-none bg-white border px-4 py-2 rounded-xl text-sm font-bold">Xuất báo cáo</button>
+                    <button className="flex-1 md:flex-none bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-orange-200">+ Thêm dữ liệu</button>
                 </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* Grid tự động nhảy cột */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
                 <StatCard
                     title="Doanh thu (VND)"
                     value="45,000,000"
@@ -102,23 +97,16 @@ const Dashboard = () => {
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Doanh thu Bar Chart */}
-                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-slate-800">Biểu đồ thu nhập tuần</h3>
-                        <MoreVertical size={20} className="text-slate-400 cursor-pointer" />
-                    </div>
-                    <div className="h-80 w-full">
+                <div className="lg:col-span-2 bg-white p-4 md:p-6 rounded-2xl border">
+                    <h3 className="font-bold text-slate-800 mb-6     text-sm md:text-base">Thu nhập tuần</h3>
+                    <div className="h-64 md:h-80 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={incomeData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                <Tooltip
-                                    cursor={{fill: '#fff7ed'}}
-                                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
-                                />
-                                <Bar dataKey="value" fill="#f97316" radius={[6, 6, 0, 0]} barSize={40} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                <Tooltip contentStyle={{borderRadius: '12px', border: 'none'}} />
+                                <Bar dataKey="value" fill="#f97316" radius={[4, 4, 0, 0]} barSize={window.innerWidth < 768 ? 20 : 40} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
