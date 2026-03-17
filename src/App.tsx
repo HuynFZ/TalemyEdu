@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut, Menu, X } from 'lucide-react';
+// 1. Thêm icon FileText (hoặc FileSignature) từ lucide-react
+import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut, Menu, X, Users as UsersIcon, UserCircle, FileText } from 'lucide-react';
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
 import Login from './features/Login';
 import Dashboard from './features/Dashboard';
 import Finance from './features/Finance';
 import LeadManagement from './features/LeadManagement';
 import Course from './features/Course';
-import { Users as UsersIcon } from 'lucide-react';
 import StaffManagement from './features/StaffManagement';
-import { UserCircle } from 'lucide-react';
 import Information from './features/Information';
+// 2. Import file ContractManagement mà chúng ta vừa tạo
+import ContractManagement from './features/ContractManagement';
 
 interface MenuItem {
     id: string;
@@ -21,26 +22,30 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
     { id: 'pipeline', label: 'Sales Pipeline', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
+    
+    // THÊM MỚI: Mục Quản lý hợp đồng (Cho phép admin, sale và finance được xem)
+    { id: 'contract', label: 'Contracts', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
+    
     { id: 'course', label: 'Course', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
     { id: 'finance', label: 'Finance', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
     {
         id: 'staff',
         label: 'Staff',
         icon: <UsersIcon size={20} />,
-        roles: ['admin'] // Chỉ admin mới được quản lý nhân viên
+        roles: ['admin']
     },
     {
         id: 'info',
         label: 'Infomation',
         icon: <UserCircle size={20} />,
-        roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] // Tất cả mọi người đều xem được
+        roles: ['admin', 'finance', 'teacher', 'pt', 'sale']
     },
 ];
 
 function MainApp() {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState<string>('dashboard');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Quản lý đóng mở Sidebar trên Mobile
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     if (!user) return <Login />;
 
@@ -54,13 +59,17 @@ function MainApp() {
             case 'finance': return <Finance />;
             case 'course': return <Course />;
             case 'pipeline': return <LeadManagement />;
+            
+            // THÊM MỚI: Xử lý hiển thị component ContractManagement
+            case 'contract': return <ContractManagement />;
+            
             default: return <Dashboard />;
         }
     };
 
     return (
         <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-            {/* MOBILE HEADER - Chỉ hiện trên màn hình nhỏ */}
+            {/* MOBILE HEADER */}
             <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-slate-200 p-4 flex justify-between items-center z-40">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg">
@@ -73,12 +82,12 @@ function MainApp() {
                 </button>
             </div>
 
-            {/* OVERLAY - Khi mở Sidebar trên Mobile */}
+            {/* OVERLAY */}
             {isSidebarOpen && (
                 <div className="lg:hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            {/* SIDEBAR - Responsive: Ẩn trên Mobile, Hiện trên Laptop */}
+            {/* SIDEBAR */}
             <aside className={`
                 fixed lg:relative inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm transition-transform duration-300
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
