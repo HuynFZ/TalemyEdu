@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, UserCheck, Users, Plus, MoreHorizontal, GraduationCap, Search, X, DollarSign, Clock, Layers } from 'lucide-react';
 import { db } from '../firebase'; // Đảm bảo đường dẫn đúng tới file config firebase của bạn
 import { collection, addDoc, onSnapshot, query, serverTimestamp, orderBy } from 'firebase/firestore';
-
+import ClassManagement from './ClassManagement'; // Component quản lý lớp học bên trong khóa học
+import { ClassroomData } from '../types'; // Đảm bảo bạn đã định nghĩa interface này trong file types/index.tsx
 const Course = () => {
   const [courses, setCourses] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  
+  const [selectedCourse, setSelectedCourse] = useState<{id: string, name: string} | null>(null);
   // State cho Form tạo khóa học mới theo Database Schema
   const [newCourse, setNewCourse] = useState({
     name: '',
@@ -45,7 +46,16 @@ const Course = () => {
       alert("Không thể tạo khóa học, vui lòng thử lại!");
     }
   };
-
+ // NẾU ĐANG CHỌN KHÓA HỌC THÌ HIỆN MÀN HÌNH QUẢN LÝ LỚP
+  if (selectedCourse) {
+    return (
+      <ClassManagement 
+        courseId={selectedCourse.id} 
+        courseTitle={selectedCourse.name} 
+        onBack={() => setSelectedCourse(null)} 
+      />
+    );
+  }
   return (
     <div className="p-8 bg-slate-50 min-h-screen relative">
       {/* Header */}
@@ -114,8 +124,11 @@ const Course = () => {
               <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${course.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
                 {course.status}
               </span>
-              <button className="text-orange-600 font-bold text-sm hover:underline">
-                Quản lý danh sách →
+              <button 
+                onClick={() => setSelectedCourse({id: course.id, name: course.name})}
+                className="text-orange-600 font-bold text-sm hover:underline"
+              >
+                Quản lý danh sách lớp →
               </button>
             </div>
           </div>
