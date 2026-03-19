@@ -62,3 +62,12 @@ docker-compose exec frontend npm install recharts
 npm install docxtemplater pizzip file-saver
 npm install --save-dev @types/file-saver
 ```
+
+## 10. Cài thư viện react-router-dom
+```cmd
+npm install react-router-dom
+```
+## 11. Khởi động lại hệ thống sau khi cài đặt các thư viện
+```cmd
+docker-compose restart frontend
+```
