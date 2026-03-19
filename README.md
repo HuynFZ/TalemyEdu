@@ -56,3 +56,9 @@ docker-compose exec frontend npm install recharts
 ```cmd
  npm install @emailjs/browser
 ```
+
+## 9. Cài đặt thư viện @types/file-saver
+```cmd
+npm install docxtemplater pizzip file-saver
+npm install --save-dev @types/file-saver
+```

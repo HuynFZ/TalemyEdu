@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-// 1. Thêm icon FileText (hoặc FileSignature) từ lucide-react
-import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut, Menu, X, Users as UsersIcon, UserCircle, FileText } from 'lucide-react';
+// ĐÃ FIX: Thêm UserCheck vào danh sách import
+import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut, Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck } from 'lucide-react';
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
 import Login from './features/Login';
 import Dashboard from './features/Dashboard';
@@ -9,8 +9,9 @@ import LeadManagement from './features/LeadManagement';
 import Course from './features/Course';
 import StaffManagement from './features/StaffManagement';
 import Information from './features/Information';
-// 2. Import file ContractManagement mà chúng ta vừa tạo
 import ContractManagement from './features/ContractManagement';
+import TeacherManagement from './features/TeacherManagement';
+import StudentManagement from './features/StudentManagement';
 
 interface MenuItem {
     id: string;
@@ -22,11 +23,13 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
     { id: 'pipeline', label: 'Sales Pipeline', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
-    
-    // THÊM MỚI: Mục Quản lý hợp đồng (Cho phép admin, sale và finance được xem)
     { id: 'contract', label: 'Contracts', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
-    
     { id: 'course', label: 'Course', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
+    { id: 'teacher', label: 'Teachers', icon: <BookUser size={20} />, roles: ['admin'] },
+    
+    // Icon UserCheck ở đây đã được import
+    { id: 'student', label: 'Students', icon: <UserCheck size={20} />, roles: ['admin', 'sale', 'finance'] },
+    
     { id: 'finance', label: 'Finance', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
     {
         id: 'staff',
@@ -59,10 +62,9 @@ function MainApp() {
             case 'finance': return <Finance />;
             case 'course': return <Course />;
             case 'pipeline': return <LeadManagement />;
-            
-            // THÊM MỚI: Xử lý hiển thị component ContractManagement
             case 'contract': return <ContractManagement />;
-            
+            case 'teacher': return <TeacherManagement />;
+            case 'student': return <StudentManagement />;
             default: return <Dashboard />;
         }
     };
