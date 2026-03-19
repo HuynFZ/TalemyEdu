@@ -10,6 +10,8 @@ export interface StudentData {
     cccd: string;
     address: string;
     enrolledCourse: string; // Khóa đang học
+    classId: string;        // THÊM: ID của lớp học
+    className: string;      // THÊM: Tên của lớp học
     totalFee: number;       // Tổng học phí
     paidAmount: number;     // Đã thanh toán
     status: 'CHỜ THANH TOÁN' | 'NỢ HỌC PHÍ' | 'ĐANG HỌC' | 'BẢO LƯU' | 'ĐÃ TỐT NGHIỆP';
@@ -37,10 +39,9 @@ export const createStudent = async (data: Omit<StudentData, 'id' | 'createdAt'>)
     } catch (error) { throw error; }
 };
 
-// Thêm vào cuối file src/services/studentService.ts
 export const updateStudent = async (id: string, data: Partial<StudentData>) => {
     try {
-        const docRef = doc(db, "students", id);
+        const docRef = doc(db, COLLECTION_NAME, id);
         await updateDoc(docRef, data);
         return true;
     } catch (error) { throw error; }
@@ -48,7 +49,7 @@ export const updateStudent = async (id: string, data: Partial<StudentData>) => {
 
 export const deleteStudent = async (id: string) => {
     try {
-        await deleteDoc(doc(db, "students", id));
+        await deleteDoc(doc(db, COLLECTION_NAME, id));
         return true;
     } catch (error) { throw error; }
 };

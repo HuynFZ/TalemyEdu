@@ -9,13 +9,16 @@ import {
 } from 'lucide-react';
 import emailjs from '@emailjs/browser'; 
 
+// IMPORT FIREBASE
+import { db } from '../firebase';
+import { collection, query, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+
 import {
     subscribeToLeads, updateLeadStatus, createLead,
     sendTestSchedule, updateLead, deleteLead, LeadData
 } from '../services/leadService';
-import { subscribeToCourses, CourseData } from '../services/courseService';
 
-// IMPORT SERVICES CHO HỢP ĐỒNG, HỌC VIÊN VÀ NHÂN SỰ
+import { subscribeToCourses, CourseData } from '../services/courseService';
 import { createStudent } from '../services/studentService';
 import { createContract } from '../services/contractService';
 import { subscribeToStaffByPosition, StaffData } from '../services/staffService';
@@ -26,7 +29,7 @@ const LeadManagement = () => {
     // ------------------- STATES CHO DATA -------------------
     const [leads, setLeads] = useState<LeadData[]>([]);
     const [courses, setCourses] = useState<CourseData[]>([]);
-    const [teachers, setTeachers] = useState<StaffData[]>([]); // Dùng StaffData
+    const [teachers, setTeachers] = useState<StaffData[]>([]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCourse, setFilterCourse] = useState('All');
@@ -46,15 +49,17 @@ const LeadManagement = () => {
     const [testDate, setTestDate] = useState('');
     const [testTime, setTestTime] = useState('');
 
-    // ------------------- STATES CHO MODAL TẠO HỢP ĐỒNG -------------------
+    // ------------------- STATES CHO MODAL TẠO HỢP ĐỒNG 1-1 -------------------
     const [isContractModalOpen, setIsContractModalOpen] = useState(false);
     const [contractLead, setContractLead] = useState<LeadData | null>(null);
+    
     const [contractForm, setContractForm] = useState({
         contractCode: '',
         studentCCCD: '',
         studentAddress: '',
-        teacherId: '',
+        courseId: '',
         courseName: '', 
+        teacherId: '',
         totalSessions: 0,
         sessionsPerWeek: '2',
         totalFee: 0,
@@ -84,7 +89,7 @@ const LeadManagement = () => {
         return matchesSearch && matchesCourse;
     });
 
-    // ------------------- LOGIC KÉO THẢ VÀ TỰ ĐỘNG ĐIỀN FORM HỢP ĐỒNG -------------------
+    // ------------------- LOGIC KÉO THẢ VÀ MỞ FORM HỢP ĐỒNG -------------------
     const onDragEnd = async (result: DropResult) => {
         const { destination, source, draggableId } = result;
         if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) return;
@@ -103,8 +108,9 @@ const LeadManagement = () => {
                     contractCode: `HD-${Math.floor(Date.now() / 1000)}`,
                     studentCCCD: '', 
                     studentAddress: '', 
-                    teacherId: '',
+                    courseId: matchedCourse?.id || '',
                     courseName: leadToEnroll.course || '', 
+                    teacherId: '',
                     totalSessions: defaultDuration,
                     sessionsPerWeek: '2',
                     totalFee: defaultFee,
@@ -119,16 +125,16 @@ const LeadManagement = () => {
         }
     };
 
-    // ------------------- HÀM XỬ LÝ KHI ĐỔI KHÓA HỌC TRONG COMBOBOX -------------------
     const handleCourseChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedCourseName = e.target.value;
         const matchedCourse = courses.find(c => c.name === selectedCourseName);
         
         setContractForm(prev => ({
             ...prev,
+            courseId: matchedCourse?.id || '',
             courseName: selectedCourseName,
             totalFee: matchedCourse ? matchedCourse.price : 0,
-            totalSessions: matchedCourse ? matchedCourse.duration : 0
+            totalSessions: matchedCourse ? matchedCourse.duration : 0,
         }));
     };
 
@@ -149,7 +155,6 @@ const LeadManagement = () => {
         } catch (error) { alert("Có lỗi xảy ra!"); } 
     };
 
-    // ------------------- LOGIC GỬI LỊCH TEST -------------------
     const openScheduleModal = (e: React.MouseEvent, lead: LeadData) => { 
         e.stopPropagation(); 
         if (!lead.email) return alert("Học viên này chưa có Email!"); 
@@ -161,7 +166,6 @@ const LeadManagement = () => {
         e.preventDefault(); 
         if (!scheduleLead || !testDate || !testTime) return; 
         try { 
-            // Cấu hình gửi mail (EmailJS)
             await emailjs.send('service_ymxefrn', 'template_wlwvjhe', { 
                 email: scheduleLead.email, 
                 to_name: scheduleLead.name, 
@@ -169,10 +173,7 @@ const LeadManagement = () => {
                 test_date: testDate, 
                 test_time: testTime, 
             }, 'mdfO13Zb5XWh4IbcJ'); 
-            
-            // Cập nhật số lần gửi vào Firebase
             await sendTestSchedule(scheduleLead.id!, scheduleLead.testRemindCount || 0); 
-            
             setIsScheduleModalOpen(false); 
             setScheduleLead(null); 
             setTestDate(''); 
@@ -183,22 +184,28 @@ const LeadManagement = () => {
         } 
     };
 
-    // ------------------- LOGIC LƯU HỢP ĐỒNG -------------------
+    // ------------------- LOGIC LƯU HỢP ĐỒNG (1 KÈM 1) -------------------
     const handleCreateContractSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!contractLead) return;
-        if (!contractForm.teacherId) return alert("Vui lòng chọn Giáo viên!");
         if (!contractForm.courseName) return alert("Vui lòng chọn Khóa học!");
+        if (!contractForm.teacherId) return alert("Vui lòng chọn Giáo viên cho lớp 1 kèm 1 này!");
 
         try {
             const selectedTeacher = teachers.find(t => t.id === contractForm.teacherId);
-            const selectedCourse = courses.find(c => c.name === contractForm.courseName);
+            const selectedCourse = courses.find(c => c.id === contractForm.courseId);
             
             if (!selectedTeacher) return alert("Không tìm thấy dữ liệu giáo viên!");
+            if (!selectedCourse) return alert("Không tìm thấy dữ liệu khóa học!");
 
             const generatedStudentCode = `HV${Math.floor(Math.random() * 10000)}`;
 
-            // 1. TẠO HỌC VIÊN TRƯỚC
+            // BƯỚC 1: KHỞI TẠO REF VÀ TÊN LỚP HỌC TRƯỚC
+            const classRef = doc(collection(db, 'classes'));
+            const newClassId = classRef.id;
+            const generatedClassName = `[1-1] ${selectedCourse.name} - ${contractLead.name}`;
+
+            // BƯỚC 2: TẠO HỌC VIÊN QUA SERVICE
             const newStudentId = await createStudent({
                 studentCode: generatedStudentCode,
                 fullName: contractLead.name,
@@ -209,44 +216,62 @@ const LeadManagement = () => {
                 enrolledCourse: contractForm.courseName,
                 totalFee: Number(contractForm.totalFee),
                 paidAmount: 0,
-                status: 'CHỜ THANH TOÁN',
+                status: 'ĐANG HỌC',
                 note: `Chuyển từ Lead. Mã HĐ: ${contractForm.contractCode}`
             });
 
-            // 2. TẠO HỢP ĐỒNG 
+            // BƯỚC 2.1: ÉP THÊM TRƯỜNG CLASSID VÀ CLASSNAME VÀO HỒ SƠ HỌC VIÊN
+            await updateDoc(doc(db, 'students', newStudentId), {
+                classId: newClassId,
+                className: generatedClassName
+            });
+
+            // BƯỚC 3: TẠO LỚP HỌC Y HỆT CẤU TRÚC TRONG ClassManagement.tsx
+            await setDoc(classRef, {
+                courseId: selectedCourse.id,
+                courseTitle: selectedCourse.name, // ClassManagement dùng biến courseTitle
+                className: generatedClassName,
+                teacherId: selectedTeacher.id,
+                teacherName: selectedTeacher.name,
+                studentId: newStudentId,          // Lưu thẳng studentId
+                studentName: contractLead.name,   // Lưu thẳng studentName
+                startDate: '',                    // Bỏ trống
+                zoomLink: '',                     // Bỏ trống
+                status: 'Đang mở',                // Trạng thái chuẩn
+                totalSessions: selectedCourse.duration || 0, // Kế thừa số buổi
+                createdAt: serverTimestamp()
+            });
+
+            // BƯỚC 4: TẠO HỢP ĐỒNG 
             await createContract({
                 contractCode: contractForm.contractCode,
                 studentId: newStudentId, 
                 teacherId: selectedTeacher.id!,
-                
                 studentName: contractLead.name,
                 studentCCCD: contractForm.studentCCCD,
                 studentPhone: contractLead.phone,
                 studentAddress: contractForm.studentAddress,
-                
-                // DATA TỪ BẢNG STAFF
-                teacherName: selectedTeacher.name, // Lấy trường name từ bảng staff
+                teacherName: selectedTeacher.name,
                 teacherCCCD: selectedTeacher.cccd || '',
                 teacherPhone: selectedTeacher.phone || '',
                 teacherAddress: selectedTeacher.address || '',
-                
                 courseName: contractForm.courseName,
-                courseDuration: selectedCourse?.duration || 0,
+                classId: newClassId,            
+                className: generatedClassName,  
+                courseDuration: selectedCourse.duration || 0,
                 totalSessions: Number(contractForm.totalSessions),
                 sessionsPerWeek: String(contractForm.sessionsPerWeek),
-
                 totalFee: Number(contractForm.totalFee),
                 paidAmount: 0,
                 paymentMethod: contractForm.paymentMethod as '1_LẦN' | '2_LẦN',
                 firstInstallment: Number(contractForm.firstInstallment),
                 secondInstallment: Number(contractForm.secondInstallment),
                 secondDeadline: contractForm.secondDeadline,
-
                 contractStatus: 'NHÁP',
                 note: contractForm.note
             });
             
-            alert("Đã tạo Hồ sơ Học viên và Hợp đồng thành công!");
+            alert("Tạo Hợp đồng & Lớp 1-1 thành công! Vui lòng vào Quản lý Lớp để kiểm tra lại.");
             setIsContractModalOpen(false);
             setContractLead(null);
         } catch (error) {
@@ -305,7 +330,6 @@ const LeadManagement = () => {
                                                             <span className="inline-block text-[9px] text-orange-600 font-black bg-orange-50 px-2 py-1 rounded-lg border border-orange-100 uppercase">{lead.course}</span>
                                                         </div>
                                                         
-                                                        {/* NÚT GỬI LỊCH TEST CHUẨN */}
                                                         {lead.status === 'HẸN TEST' && (
                                                             <button 
                                                                 onClick={(e) => openScheduleModal(e, lead)} 
@@ -410,8 +434,8 @@ const LeadManagement = () => {
                     <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-6 border-b border-slate-100 bg-orange-500 text-white flex justify-between items-center shrink-0">
                             <div>
-                                <h3 className="text-xl font-black flex items-center gap-2"><FileText size={20}/> Khởi tạo Hồ sơ & Hợp đồng</h3>
-                                <p className="text-xs opacity-90 mt-1">Hoàn thiện thông tin cho học viên: <strong>{contractLead.name}</strong></p>
+                                <h3 className="text-xl font-black flex items-center gap-2"><FileText size={20}/> Tạo Hồ sơ & Hợp đồng (Lớp 1-1)</h3>
+                                <p className="text-xs opacity-90 mt-1">Hệ thống sẽ tự động tạo Lớp học mới cho: <strong>{contractLead.name}</strong></p>
                             </div>
                             <button onClick={() => setIsContractModalOpen(false)} className="hover:bg-white/20 p-2 rounded-xl transition-all"><X size={20} /></button>
                         </div>
@@ -438,9 +462,10 @@ const LeadManagement = () => {
                                 </div>
                             </div>
 
-                            {/* THÔNG TIN KHÓA HỌC VÀ GIÁO VIÊN */}
+                            {/* THÔNG TIN KHÓA HỌC VÀ LỚP HỌC */}
                             <div className="space-y-4">
-                                <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm border-b pb-2"><BookOpen size={16} className="text-orange-500"/> Khóa học & Giáo viên (Bên B)</h4>
+                                <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm border-b pb-2"><BookOpen size={16} className="text-orange-500"/> Thiết lập Lớp học 1-1 (Bên B)</h4>
+                                
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-slate-500 uppercase">Khóa học đăng ký *</label>
@@ -451,11 +476,11 @@ const LeadManagement = () => {
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Chọn Giáo viên *</label>
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Chọn Giáo viên giảng dạy *</label>
                                         <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-orange-500 text-sm font-bold text-slate-700"
                                             value={contractForm.teacherId} onChange={(e) => setContractForm({...contractForm, teacherId: e.target.value})}>
                                             <option value="" disabled>-- Chọn Giáo viên --</option>
-                                            {teachers.map(t => <option key={t.id} value={t.id}>{t.name} (SĐT: {t.phone})</option>)}
+                                            {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                         </select>
                                     </div>
                                 </div>
