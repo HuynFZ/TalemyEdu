@@ -37,14 +37,18 @@ export const createStudent = async (data: Omit<StudentData, 'id' | 'createdAt'>)
     } catch (error) { throw error; }
 };
 
+// Thêm vào cuối file src/services/studentService.ts
 export const updateStudent = async (id: string, data: Partial<StudentData>) => {
     try {
-        await updateDoc(doc(db, COLLECTION_NAME, id), data);
+        const docRef = doc(db, "students", id);
+        await updateDoc(docRef, data);
+        return true;
     } catch (error) { throw error; }
 };
 
 export const deleteStudent = async (id: string) => {
     try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
+        await deleteDoc(doc(db, "students", id));
+        return true;
     } catch (error) { throw error; }
 };

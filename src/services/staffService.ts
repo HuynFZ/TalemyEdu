@@ -8,7 +8,10 @@ import {
     orderBy,
     where,
     getDocs,
-    limit
+    limit,
+    doc,
+    updateDoc,
+    deleteDoc
 } from 'firebase/firestore';
 import { Role } from '../context/AuthContext';
 
@@ -24,6 +27,8 @@ export interface StaffData {
     salary: number;
     hireDate: string;
     status: 'active' | 'inactive';
+    cccd?: string; // THÊM TRƯỜNG NÀY
+    bio?: string;  // THÊM TRƯỜNG NÀY (Tiểu sử/Ghi chú)
 }
 
 /**
@@ -63,9 +68,9 @@ export const createStaff = async (data: StaffData & { password?: string }) => {
 export const subscribeToStaffs = (callback: (data: StaffData[]) => void) => {
     const q = query(collection(db, "staffs"), orderBy("createdAt", "desc"));
     return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
+        const data = snapshot.docs.map(document => ({
+            id: document.id,
+            ...document.data()
         })) as StaffData[];
         callback(data);
     });
@@ -93,6 +98,50 @@ export const getStaffProfile = async (email: string) => {
         return null;
     } catch (error) {
         console.error("Lỗi khi lấy thông tin cá nhân:", error);
+        throw error;
+    }
+};
+
+/**
+ * 4. Hàm lấy danh sách Staff theo vị trí (Ví dụ: Chỉ lấy Giáo viên)
+ */
+export const subscribeToStaffByPosition = (position: Role, callback: (staffs: StaffData[]) => void) => {
+    const q = query(
+        collection(db, "staffs"), 
+        where("position", "==", position)
+    );
+    return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(document => ({ 
+            id: document.id, 
+            ...document.data() 
+        })) as StaffData[];
+        callback(data);
+    });
+};
+
+/**
+ * 5. Hàm Cập nhật thông tin nhân sự / giáo viên
+ */
+export const updateStaff = async (id: string, data: Partial<StaffData>) => {
+    try {
+        const staffRef = doc(db, "staffs", id);
+        await updateDoc(staffRef, data);
+        return true;
+    } catch (error) {
+        console.error("Lỗi cập nhật:", error);
+        throw error;
+    }
+};
+
+/**
+ * 6. Hàm Xóa nhân sự / giáo viên
+ */
+export const deleteStaff = async (id: string) => {
+    try {
+        await deleteDoc(doc(db, "staffs", id));
+        return true;
+    } catch (error) {
+        console.error("Lỗi xóa:", error);
         throw error;
     }
 };
