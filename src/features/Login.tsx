@@ -45,7 +45,7 @@ const Login = () => {
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="ten.chucvu@talemy.edu"
+                                placeholder="Email công việc" // Đổi từ ten.chucvu@talemy.edu thành cái này cho rộng rãi
                                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-transparent focus:border-orange-500/20 rounded-2xl outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300"
                             />
                         </div>

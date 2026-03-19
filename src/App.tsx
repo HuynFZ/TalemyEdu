@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
-// ĐÃ FIX: Thêm UserCheck vào danh sách import
-import { LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut, Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck } from 'lucide-react';
+// Import routing
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import {
+    LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut,
+    Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck
+} from 'lucide-react';
+
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
 import Login from './features/Login';
 import Dashboard from './features/Dashboard';
@@ -12,6 +17,7 @@ import Information from './features/Information';
 import ContractManagement from './features/ContractManagement';
 import TeacherManagement from './features/TeacherManagement';
 import StudentManagement from './features/StudentManagement';
+import PublicBooking from './features/PublicBooking'; // Trang chọn lịch công khai
 
 interface MenuItem {
     id: string;
@@ -26,31 +32,20 @@ const menuItems: MenuItem[] = [
     { id: 'contract', label: 'Contracts', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
     { id: 'course', label: 'Course', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
     { id: 'teacher', label: 'Teachers', icon: <BookUser size={20} />, roles: ['admin'] },
-    
-    // Icon UserCheck ở đây đã được import
     { id: 'student', label: 'Students', icon: <UserCheck size={20} />, roles: ['admin', 'sale', 'finance'] },
-    
     { id: 'finance', label: 'Finance', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
-    {
-        id: 'staff',
-        label: 'Staff',
-        icon: <UsersIcon size={20} />,
-        roles: ['admin']
-    },
-    {
-        id: 'info',
-        label: 'Infomation',
-        icon: <UserCircle size={20} />,
-        roles: ['admin', 'finance', 'teacher', 'pt', 'sale']
-    },
+    { id: 'staff', label: 'Staff', icon: <UsersIcon size={20} />, roles: ['admin'] },
+    { id: 'info', label: 'Infomation', icon: <UserCircle size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
 ];
 
-function MainApp() {
+// --- COMPONENT CHÍNH CỦA HỆ THỐNG QUẢN TRỊ ---
+function MainLayout() {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState<string>('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    if (!user) return <Login />;
+    // Nếu chưa đăng nhập thì chuyển về trang Login (ngoại trừ các route public đã xử lý ở App)
+    if (!user) return <Navigate to="/login" />;
 
     const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
 
@@ -146,10 +141,33 @@ function MainApp() {
     );
 }
 
+// --- CẤU HÌNH ROUTING TOÀN ỨNG DỤNG ---
 export default function App() {
     return (
-        <AuthProvider>
-            <MainApp />
-        </AuthProvider>
+        <BrowserRouter>
+            <AuthProvider>
+                <Routes>
+                    {/* 1. Trang Đăng nhập */}
+                    <Route path="/login" element={<LoginWrapper />} />
+
+                    {/* 2. Trang chọn lịch công khai cho học viên (KHÔNG CẦN LOGIN) */}
+                    <Route path="/booking/:classId" element={<PublicBooking />} />
+
+                    {/* 3. Toàn bộ hệ thống quản trị nội bộ */}
+                    <Route path="/*" element={<MainLayout />} />
+
+                    {/* Mặc định về trang chủ */}
+                    <Route path="/" element={<Navigate to="/dashboard" />} />
+                </Routes>
+            </AuthProvider>
+        </BrowserRouter>
     );
+}
+
+// Helper để xử lý logic Login
+function LoginWrapper() {
+    const { user } = useAuth();
+    // Nếu đã đăng nhập rồi thì đá về dashboard luôn
+    if (user) return <Navigate to="/dashboard" />;
+    return <Login />;
 }
