@@ -28,7 +28,6 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
     const [students, setStudents] = useState<any[]>([]);
     const [selectedTeacherData, setSelectedTeacherData] = useState<any>(null);
 
-    // NGÀY HÔM NAY ĐỂ SO SÁNH (Dùng cho logic khóa nút)
     const today = new Date().toISOString().split('T')[0];
 
     const [newClass, setNewClass] = useState({
@@ -55,6 +54,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
 
     useEffect(() => {
         if (selectedClass?.id) {
+            // Sắp xếp theo ngày học
             onSnapshot(query(collection(db, "sessions"), where("classId", "==", selectedClass.id), orderBy("date", "asc")), (snap) => setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
             if (selectedClass.teacherId) getDoc(doc(db, "staffs", selectedClass.teacherId)).then(s => s.exists() && setSelectedTeacherData(s.data()));
         }
@@ -74,23 +74,19 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         await updateDoc(doc(db, "sessions", sid), { status });
     };
 
-    // LOGIC COPY LINK CHỌN LỊCH (Đường dẫn nằm ở đây)
     const copyBookingLink = (id: string) => {
         const link = `${window.location.origin}/booking/${id}`;
         navigator.clipboard.writeText(link);
         alert("Đã copy link chọn lịch gửi cho học viên!");
     };
 
-    // TÍNH TOÁN TIẾN ĐỘ
     const attendedCount = sessions.filter(s => s.status === 'Đã điểm danh').length;
     const absentCount = sessions.filter(s => s.status === 'Vắng').length;
     const isWarning = absentCount >= 2;
 
-    // --- PHẦN RENDER SESSIONS (CHI TIẾT LỚP HỌC) ---
     if (view === 'sessions' && selectedClass) {
         return (
             <div className="p-4 md:p-8 bg-slate-50 min-h-screen animate-in slide-in-from-right duration-300">
-                {/* Header trang chi tiết */}
                 <div className="flex items-center gap-4 mb-6">
                     <button onClick={() => isDirectClass ? onBack() : setView('list')} className="p-3 bg-white hover:bg-orange-50 text-orange-600 rounded-2xl shadow-sm border border-slate-100 transition-all">
                         <ArrowLeft size={20}/>
@@ -103,7 +99,6 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                     </div>
                 </div>
 
-                {/* Banner cảnh báo vắng >= 2 buổi */}
                 {isWarning && (
                     <div className="mb-6 bg-red-500 text-white p-5 rounded-[2rem] shadow-xl flex items-center gap-4 animate-bounce">
                         <AlertTriangle size={28} />
@@ -112,7 +107,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Cột trái: Thông tin nhân sự & Link */}
+                    {/* BÊN TRÁI: THÔNG TIN */}
                     <div className="lg:col-span-1 space-y-6">
                         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-6 font-sans">
                             <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
@@ -142,14 +137,14 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                         </div>
                     </div>
 
-                    {/* Cột phải: Danh sách buổi học */}
+                    {/* BÊN PHẢI: LỘ TRÌNH CHI TIẾT THEO KHUNG GIỜ */}
                     <div className="lg:col-span-2">
                         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden font-sans">
                             <div className="p-6 border-b border-slate-50 flex justify-between bg-slate-50/30 font-black text-xs uppercase text-slate-800 italic tracking-widest items-center">
-                                <div className="flex items-center gap-2"><FileText size={18} className="text-orange-500"/> LỘ TRÌNH ĐÀO TẠO</div>
+                                <div className="flex items-center gap-2"><FileText size={18} className="text-orange-500"/> LỘ TRÌNH CHI TIẾT</div>
                                 <div className="flex gap-4">
-                                    <span className="text-emerald-500">HỌC: {attendedCount}</span>
-                                    <span className="text-red-500">VẮNG: {absentCount}</span>
+                                    <span className="text-emerald-500 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> ĐÃ HỌC: {attendedCount}</span>
+                                    <span className="text-red-500 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-500"></div> VẮNG: {absentCount}</span>
                                 </div>
                             </div>
                             <div className="divide-y divide-slate-50">
@@ -159,42 +154,53 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                                     const isPast = s.date < today;
 
                                     return (
-                                        <div key={s.id} className={`p-6 flex items-center justify-between transition-colors ${isToday ? 'bg-orange-50/40' : ''}`}>
+                                        <div key={s.id} className={`p-6 flex items-center justify-between transition-colors ${isToday ? 'bg-orange-50/40' : 'hover:bg-slate-50/50'}`}>
                                             <div className="flex items-center gap-6">
                                                 <div className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center border transition-all ${isToday ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'bg-white border-slate-200'}`}>
                                                     <span className={`text-[8px] font-black uppercase ${isToday ? 'text-white/70' : 'text-slate-400'}`}>Buổi</span>
                                                     <span className="text-xl font-black">{idx + 1}</span>
                                                 </div>
                                                 <div>
-                                                    <p className={`font-black uppercase text-sm ${isToday ? 'text-orange-600' : 'text-slate-700'}`}>
-                                                        {s.date} {isToday && <span className="bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-pulse ml-2">HÔM NAY</span>}
-                                                    </p>
+                                                    <div className="flex items-center gap-3">
+                                                        <p className={`font-black uppercase text-sm ${isToday ? 'text-orange-600' : 'text-slate-700'}`}>
+                                                            {new Date(s.date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                                        </p>
+                                                        {isToday && <span className="bg-orange-500 text-white text-[8px] px-2 py-0.5 rounded-full animate-pulse font-black">HÔM NAY</span>}
+                                                    </div>
+
+                                                    {/* HIỂN THỊ KHUNG GIỜ HỌC */}
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Clock size={12} className="text-orange-500" />
+                                                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tighter">
+                                                            Khung giờ: <b className="text-slate-800">{s.startTime || '--:--'} – {s.endTime || '--:--'}</b>
+                                                        </span>
+                                                    </div>
+
                                                     {s.status === 'Chưa diễn ra' ? (
-                                                        <div className="mt-2 flex gap-2">
+                                                        <div className="mt-3 flex gap-2">
                                                             <button
                                                                 disabled={isLocked}
                                                                 onClick={() => handleUpdateStatus(s.id, 'Đã điểm danh')}
-                                                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isLocked ? 'bg-slate-50 text-slate-300' : 'bg-emerald-500 text-white shadow-lg active:scale-95'}`}
+                                                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isLocked ? 'bg-slate-50 text-slate-300' : 'bg-emerald-500 text-white shadow-lg active:scale-95 hover:bg-emerald-600'}`}
                                                             >
                                                                 Điểm danh
                                                             </button>
                                                             <button
                                                                 disabled={isLocked}
                                                                 onClick={() => handleUpdateStatus(s.id, 'Vắng')}
-                                                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isLocked ? 'bg-slate-50 text-slate-300' : 'bg-red-500 text-white shadow-lg active:scale-95'}`}
+                                                                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isLocked ? 'bg-slate-50 text-slate-300' : 'bg-red-500 text-white shadow-lg active:scale-95 hover:bg-red-600'}`}
                                                             >
                                                                 Báo vắng
                                                             </button>
-                                                            {isLocked && <span className="text-[8px] font-bold text-slate-400 italic flex items-center gap-1 ml-1"><Info size={10}/> {isPast ? "Quá hạn" : "Chưa tới ngày"}</span>}
+                                                            {isLocked && <span className="text-[8px] font-bold text-slate-400 italic flex items-center gap-1 ml-1"><Info size={10}/> {isPast ? "Quá hạn thao tác" : "Chờ tới ngày dạy"}</span>}
                                                         </div>
                                                     ) : (
-                                                        <div className="mt-2 flex items-center gap-3">
+                                                        <div className="mt-3 flex items-center gap-3">
                                                             <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md border ${s.status === 'Đã điểm danh' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
                                                                 {s.status}
                                                             </span>
-                                                            {/* Chỉ cho Reset nếu là ngày hôm nay */}
                                                             {isToday && (
-                                                                <button onClick={() => handleUpdateStatus(s.id, 'Chưa diễn ra')} className="p-1 text-slate-400 hover:text-orange-500 transition-colors" title="Hoàn tác để sửa">
+                                                                <button onClick={() => handleUpdateStatus(s.id, 'Chưa diễn ra')} className="p-1 text-slate-400 hover:text-orange-500 transition-colors" title="Hoàn tác">
                                                                     <Trash2 size={14} />
                                                                 </button>
                                                             )}
@@ -202,7 +208,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                                                     )}
                                                 </div>
                                             </div>
-                                            {s.status !== 'Chưa diễn ra' && <CheckCircle2 className={s.status === 'Đã điểm danh' ? 'text-emerald-500' : s.status === 'Vắng' ? 'text-red-500' : 'text-slate-100'} size={24} />}
+                                            {s.status !== 'Chưa diễn ra' && <CheckCircle2 className={s.status === 'Đã điểm danh' ? 'text-emerald-500' : 'text-red-500'} size={24} />}
                                         </div>
                                     );
                                 })}
@@ -214,7 +220,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         );
     }
 
-    // --- VIEW DANH SÁCH LỚP (GIỮ NGUYÊN) ---
+    // --- VIEW DANH SÁCH LỚP (BẢNG CHO ADMIN) ---
     return (
         <div className="p-4 md:p-8 bg-slate-50 min-h-screen font-sans">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
@@ -234,7 +240,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                             <td className="p-6"><p className="font-black text-slate-800 uppercase text-sm leading-tight">{cls.className}</p><p className="text-[10px] text-slate-400 font-bold mt-1 italic uppercase tracking-widest flex items-center gap-1"><CalendarIcon size={12}/> {cls.startDate}</p></td>
                             <td className="p-6 font-bold text-slate-700">{cls.studentName}</td>
                             <td className="p-6 font-black text-xs text-slate-800 uppercase flex items-center gap-2 mt-4"><UserCheck size={14} className="text-emerald-500"/> {cls.teacherName}</td>
-                            <td className="p-6">
+                            <td className="p-6 text-center">
                                 <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => copyBookingLink(cls.id)} className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="Gửi link cho HV"><LinkIcon size={18}/></button>
                                     <button onClick={() => { setSelectedClass(cls); setView('sessions'); }} className="px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-orange-600 text-[10px] font-black uppercase flex items-center gap-2 transition-all shadow-md">Chi tiết <ChevronRight size={14}/></button>
@@ -247,20 +253,17 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                 </table>
             </div>
 
-            {/* MODAL MỞ LỚP HỌC (GIỮ NGUYÊN NHƯ BẢN TRƯỚC) */}
+            {/* MODAL MỞ LỚP HỌC (GIỮ NGUYÊN) */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-in fade-in duration-300">
                     <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 font-sans">
-                        <div className="p-8 bg-orange-500 text-white flex justify-between items-center shadow-lg">
-                            <h3 className="text-3xl font-black italic uppercase tracking-tighter">MỞ LỚP HỌC 1-1</h3>
-                            <button onClick={() => setShowCreateModal(false)} className="hover:rotate-90 transition-all p-2 bg-white/10 rounded-2xl"><X size={28} /></button>
-                        </div>
+                        <div className="p-8 bg-orange-500 text-white flex justify-between items-center shadow-lg"><h3 className="text-3xl font-black italic uppercase tracking-tighter">MỞ LỚP HỌC 1-1</h3><button onClick={() => setShowCreateModal(false)} className="hover:rotate-90 transition-all p-2 bg-white/10 rounded-2xl"><X size={28} /></button></div>
                         <form onSubmit={handleCreateClass} className="p-10 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
-                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">TÊN LỚP (MÃ LỚP) *</label><input required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-bold border-2 border-transparent focus:border-orange-500/20 outline-none" value={newClass.className} onChange={e => setNewClass({...newClass, className: e.target.value})} placeholder="VD: IELTS-101-NGOC" /></div>
-                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">HỌC VIÊN ĐĂNG KÝ (1-1) *</label><select required className="w-full px-6 py-5 bg-blue-50/30 text-blue-600 rounded-[1.2rem] font-black border-2 border-blue-100/50 outline-none cursor-pointer" onChange={e => { const s = students.find(x => x.id === e.target.value); setNewClass({...newClass, studentId: s.id, studentName: s.name}); }}><option value="">-- Chọn học viên --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}</select></div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">GIẢNG VIÊN HƯỚNG DẪN</label><select required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-bold outline-none" onChange={e => { const t = teachers.find(x => x.id === e.target.value); setNewClass({...newClass, teacherId: t.id, teacherName: t.name}); }}><option value="">-- Chọn GV --</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div><div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">NGÀY KHAI GIẢNG DỰ KIẾN</label><input type="date" required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-black" value={newClass.startDate} onChange={e => setNewClass({...newClass, startDate: e.target.value})} /></div></div>
-                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">LINK PHÒNG ZOOM CỐ ĐỊNH *</label><input required className="w-full px-6 py-5 bg-blue-50/20 text-blue-700 rounded-[1.2rem] font-bold outline-none" value={newClass.zoomLink} onChange={e => setNewClass({...newClass, zoomLink: e.target.value})} placeholder="https://zoom.us/j/..." /></div>
-                            <button type="submit" className="w-full bg-orange-500 text-white font-black py-6 rounded-[1.5rem] shadow-xl uppercase tracking-[0.2em] text-xl mt-4 active:scale-95 transition-all">XÁC NHẬN TẠO LỚP</button>
+                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">TÊN LỚP (MÃ LỚP) *</label><input required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-bold border-2 border-transparent focus:border-orange-500/20 outline-none text-slate-700 placeholder:text-slate-300 transition-all" value={newClass.className} onChange={e => setNewClass({...newClass, className: e.target.value})} placeholder="VD: IELTS-101-NGOC" /></div>
+                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">HỌC VIÊN ĐĂNG KÝ (1-1) *</label><select required className="w-full px-6 py-5 bg-blue-50/30 text-blue-600 rounded-[1.2rem] font-black border-2 border-blue-100/50 outline-none appearance-none cursor-pointer" onChange={e => { const s = students.find(x => x.id === e.target.value); setNewClass({...newClass, studentId: s.id, studentName: s.name}); }}><option value="">-- Chọn học viên --</option>{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}</select></div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">GIẢNG VIÊN HƯỚNG DẪN</label><select required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-bold border-2 border-transparent focus:border-orange-500/20 outline-none appearance-none" onChange={e => { const t = teachers.find(x => x.id === e.target.value); setNewClass({...newClass, teacherId: t.id, teacherName: t.name}); }}><option value="">-- Chọn GV --</option>{teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div><div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">NGÀY KHAI GIẢNG DỰ KIẾN</label><input type="date" required className="w-full px-6 py-5 bg-slate-50 rounded-[1.2rem] font-black border-2 border-transparent focus:border-orange-500/20 outline-none transition-all" value={newClass.startDate} onChange={e => setNewClass({...newClass, startDate: e.target.value})} /></div></div>
+                            <div className="space-y-2"><label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em] ml-1">LINK PHÒNG HỌC ZOOM CỐ ĐỊNH *</label><input required className="w-full px-6 py-5 bg-blue-50/20 text-blue-700 rounded-[1.2rem] font-bold border-2 border-transparent focus:border-blue-500/20 outline-none placeholder:text-blue-200" value={newClass.zoomLink} onChange={e => setNewClass({...newClass, zoomLink: e.target.value})} placeholder="https://zoom.us/j/..." /></div>
+                            <button type="submit" className="w-full bg-orange-500 text-white font-black py-6 rounded-[1.5rem] shadow-xl hover:bg-orange-600 transition-all active:scale-[0.98] uppercase tracking-[0.2em] text-xl mt-4">XÁC NHẬN TẠO LỚP</button>
                         </form>
                     </div>
                 </div>

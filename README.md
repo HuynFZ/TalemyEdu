@@ -67,7 +67,12 @@ npm install --save-dev @types/file-saver
 ```cmd
 npm install react-router-dom
 ```
-## 11. Khởi động lại hệ thống sau khi cài đặt các thư viện
+
+## 11. Cài dặt thư viện gapi-script
+```cmd
+npm install gapi-script @types/gapi @types/gapi.auth2
+```
+## 12. Khởi động lại hệ thống sau khi cài đặt các thư viện
 ```cmd
 docker-compose restart frontend
 ```
