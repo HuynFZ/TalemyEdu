@@ -1,234 +1,251 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { 
-    User, UserCheck, GraduationCap, Plus, ArrowLeft, X, 
-    Calendar as CalendarIcon, Eye, Trash2, Search, ChevronRight
-} from 'lucide-react';
-import SessionManagement from './SessionManagement';
+import { Search, Filter, FileText, Eye, Download, Trash2, CheckCircle, Clock, XCircle, FileSignature, X } from 'lucide-react';
+import { subscribeToContracts, ContractData, updateContractStatus, deleteContract } from '../services/contractService';
 
-interface ClassManagementProps {
-    courseId: string;
-    courseTitle: string;
-    onBack: () => void;
-}
+// IMPORT THƯ VIỆN XUẤT WORD
+import PizZip from 'pizzip';
+import Docxtemplater from 'docxtemplater';
+import { saveAs } from 'file-saver';
 
-const DAYS_OF_WEEK = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
-
-const ClassManagement = ({ courseId, courseTitle, onBack }: ClassManagementProps) => {
-    const [view, setView] = useState<'list' | 'session'>('list');
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [activeClass, setActiveClass] = useState<any>(null);
-    const [classes, setClasses] = useState<any[]>([]);
+const ContractManagement = () => {
+    const [contracts, setContracts] = useState<ContractData[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
 
-    // Dữ liệu hỗ trợ nhân sự
-    const [teachers, setTeachers] = useState<any[]>([]);
-    const [pts, setPts] = useState<any[]>([]);
-    const [students, setStudents] = useState<any[]>([]);
-
-    const [newClass, setNewClass] = useState({
-        className: '', teacherId: '', teacherName: '',
-        ptId: '', ptName: '', studentId: '', studentName: '',
-        startDate: '', studyDay: 'Thứ 2', status: 'Đang mở'
-    });
+    // State cho Modal Xem chi tiết
+    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [selectedContract, setSelectedContract] = useState<ContractData | null>(null);
 
     useEffect(() => {
-        const qClasses = query(collection(db, "classes"), where("courseId", "==", courseId));
-        const unsub = onSnapshot(qClasses, (snap) => setClasses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubscribe = subscribeToContracts(setContracts);
+        return () => unsubscribe();
+    }, []);
 
-        onSnapshot(query(collection(db, "staffs"), where("position", "==", "teacher")), (s) => setTeachers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        onSnapshot(query(collection(db, "staffs"), where("position", "==", "pt")), (s) => setPts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        onSnapshot(query(collection(db, "leads"), where("status", "==", "ĐÃ NHẬP HỌC")), (s) => setStudents(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const filteredContracts = contracts.filter(contract => {
+        const matchesSearch = contract.studentName.toLowerCase().includes(searchTerm.toLowerCase()) || contract.contractCode.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === 'All' || contract.contractStatus === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
 
-        return () => unsub();
-    }, [courseId]);
-
-    // HÀM TẠO LỚP & TỰ ĐỘNG TẠO 4 BUỔI HỌC ĐẦU TIÊN (1 THÁNG)
-    const handleCreateClass = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            const docRef = await addDoc(collection(db, "classes"), { 
-                ...newClass, courseId, courseTitle, createdAt: serverTimestamp() 
-            });
-
-            // Tự động tạo lộ trình 1 tháng (4 buổi) cách nhau 7 ngày
-            const baseDate = new Date(newClass.startDate);
-            for (let i = 1; i <= 4; i++) {
-                const sessionDate = new Date(baseDate);
-                sessionDate.setDate(baseDate.getDate() + (i - 1) * 7);
-                
-                await addDoc(collection(db, "sessions"), {
-                    classId: docRef.id,
-                    sessionNumber: i,
-                    date: sessionDate.toISOString().split('T')[0],
-                    status: 'Chưa diễn ra',
-                    createdAt: serverTimestamp()
-                });
-            }
-
-            setShowCreateModal(false);
-            setNewClass({ className: '', teacherId: '', teacherName: '', ptId: '', ptName: '', studentId: '', studentName: '', startDate: '', studyDay: 'Thứ 2', status: 'Đang mở' });
-        } catch (error) { 
-            alert("Lỗi khi tạo lớp học!"); 
+    const handleStatusChange = async (id: string, newStatus: string) => {
+        if (window.confirm(`Bạn muốn đổi trạng thái hợp đồng thành: ${newStatus}?`)) {
+            try { await updateContractStatus(id, newStatus); }
+            catch (error) { alert("Lỗi khi cập nhật!"); }
         }
     };
 
-    if (view === 'session' && activeClass) {
-        return <SessionManagement classData={activeClass} onBack={() => setView('list')} />;
-    }
+    const handleDelete = async (id: string) => {
+        if (window.confirm("Cảnh báo: Xóa hợp đồng không thể hoàn tác. Bạn có chắc chắn?")) {
+            try { await deleteContract(id); }
+            catch (error) { alert("Lỗi khi xóa!"); }
+        }
+    };
+
+    // MỞ MODAL XEM
+    const handleViewContract = (contract: ContractData) => {
+        setSelectedContract(contract);
+        setIsViewModalOpen(true);
+    };
+
+    // HÀM XUẤT FILE WORD VÀ ĐIỀN DATA
+    const handleExportWord = async (contract: ContractData) => {
+        try {
+            const response = await fetch('/Mau_Hop_Dong.docx');
+            if (!response.ok) throw new Error("Không tìm thấy file Mau_Hop_Dong.docx trong thư mục public");
+            
+            const blob = await response.blob();
+            const reader = new FileReader();
+
+            reader.onload = function(event) {
+                const content = event.target?.result as ArrayBuffer;
+                const zip = new PizZip(content);
+                const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+                const today = new Date();
+                
+                // LOGIC XỬ LÝ THANH TOÁN
+                let firstPaymentText = '';
+                let secondPaymentText = '';
+                let deadlineText = '';
+
+                if (contract.paymentMethod === '1_LẦN') {
+                    // Nếu 1 lần: Đóng đủ tổng phí, 2 trường sau để trống (Không)
+                    firstPaymentText = (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ';
+                    secondPaymentText = 'Không';
+                    deadlineText = 'Không';
+                } else {
+                    // Nếu 2 lần: Lấy dữ liệu đợt 1, đợt 2, hạn đợt 2
+                    firstPaymentText = (contract.firstInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                    secondPaymentText = (contract.secondInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                    deadlineText = contract.secondDeadline || '...................';
+                }
+
+                // MAP TOÀN BỘ DATA VÀO BIẾN WORD
+                doc.render({
+                    day: today.getDate().toString().padStart(2, '0'),
+                    month: (today.getMonth() + 1).toString().padStart(2, '0'),
+                    year: today.getFullYear(),
+                    
+                    // Thông tin Học viên
+                    studentName: contract.studentName || '....................',
+                    studentCCCD: contract.studentCCCD || '....................',
+                    studentPhone: contract.studentPhone || '....................',
+                    studentAddress: contract.studentAddress || '....................',
+                    
+                    // Thông tin Giáo viên
+                    teacherName: contract.teacherName || '....................',
+                    teacherCCCD: contract.teacherCCCD || '....................',
+                    teacherPhone: contract.teacherPhone || '....................',
+                    teacherAddress: contract.teacherAddress || '....................',
+                    
+                    // Khóa học & Tiền bạc
+                    courseName: contract.courseName || '....................',
+                    totalSessions: contract.totalSessions || contract.courseDuration || '......',
+                    sessionsPerWeek: contract.sessionsPerWeek || '......',
+                    totalFee: (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ',
+                    
+                    // Thanh toán
+                    firstPayment: firstPaymentText,
+                    secondPayment: secondPaymentText,
+                    deadlineSession: deadlineText
+                });
+
+                const out = doc.getZip().generate({
+                    type: "blob",
+                    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                });
+
+                saveAs(out, `HopDong_${contract.studentName}_${contract.contractCode}.docx`);
+            };
+
+            reader.readAsArrayBuffer(blob);
+        } catch (error) {
+            console.error(error);
+            alert("Lỗi xuất file: Vui lòng kiểm tra lại file Mau_Hop_Dong.docx đã nằm trong thư mục public chưa.");
+        }
+    };
 
     return (
-        <div className="p-8 bg-slate-50 min-h-screen relative">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-10">
-                <div className="flex items-center gap-5">
-                    <button onClick={onBack} className="p-3.5 bg-white text-orange-600 rounded-2xl shadow-sm border border-slate-100 hover:bg-orange-50 transition-all">
-                        <ArrowLeft size={22}/>
-                    </button>
-                    <div>
-                        <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase leading-none mb-1">Quản lý Lớp 1-1</h2>
-                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest italic opacity-80">Khóa học: {courseTitle}</p>
-                    </div>
+        <div className="p-4 md:p-8 h-full flex flex-col bg-slate-50 relative overflow-y-auto custom-scrollbar">
+            {/* ... (Giữ nguyên phần Header & Filter của bạn) ... */}
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-4">
+                <div>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                        <FileSignature className="text-orange-500" size={32} /> Quản lý Hợp đồng
+                    </h2>
                 </div>
-                <button onClick={() => setShowCreateModal(true)} className="bg-orange-500 text-white px-7 py-4 rounded-[1.5rem] font-black shadow-2xl shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95 flex items-center gap-3">
-                    <Plus size={20} /> MỞ LỚP MỚI
-                </button>
+                {/* Thanh search... */}
             </div>
 
-            {/* DANH SÁCH LỚP HỌC (LIST VIEW) */}
-            <div className="bg-white rounded-[3rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-slate-50/50 border-b border-slate-100">
-                            <th className="p-8 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em]">Thông tin Lớp / Ngày học</th>
-                            <th className="p-8 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em]">Học viên (1-1)</th>
-                            <th className="p-8 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em]">Giảng viên & Trợ giảng</th>
-                            <th className="p-8 text-[11px] font-black uppercase text-slate-400 tracking-[0.2em]">Trạng thái</th>
-                            <th className="p-8 text-right text-[11px] font-black uppercase text-slate-400 tracking-[0.2em]">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                        {classes.map((cls) => (
-                            <tr 
-                                key={cls.id} 
-                                onDoubleClick={() => { setActiveClass(cls); setView('session'); }}
-                                className="hover:bg-orange-50/30 transition-all group cursor-pointer active:bg-orange-100/30"
-                            >
-                                <td className="p-8">
-                                    <p className="font-black text-slate-800 text-lg tracking-tight mb-2 uppercase">{cls.className}</p>
-                                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-orange-100 text-orange-600 rounded-xl text-[10px] font-black uppercase tracking-widest border border-orange-200">
-                                        <CalendarIcon size={12}/> {cls.studyDay} (Từ {cls.startDate})
-                                    </div>
-                                </td>
-                                <td className="p-8">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center font-black text-xs border border-blue-100 shadow-inner">{cls.studentName.charAt(0)}</div>
-                                        <span className="font-bold text-slate-700 tracking-tight text-base">{cls.studentName}</span>
-                                    </div>
-                                </td>
-                                <td className="p-8">
-                                    <div className="flex flex-col">
-                                        {/* TÊN GIẢNG VIÊN TO NHẤT */}
-                                        <span className="text-lg font-black text-slate-800 tracking-tight leading-none mb-1.5 flex items-center gap-2 uppercase">
-                                            <UserCheck size={18} className="text-emerald-500"/> {cls.teacherName}
-                                        </span>
-                                        {/* TÊN PT NHỎ NHẤT & IN NGHIÊNG */}
-                                        <span className="text-[11px] font-bold text-slate-400 italic opacity-80 flex items-center gap-1 pl-6">
-                                            Trợ giảng: {cls.ptName || '---'}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td className="p-8 text-center md:text-left">
-                                    <span className={`px-4 py-1.5 text-[10px] font-black rounded-xl uppercase tracking-[0.15em] border-2 ${cls.status === 'Đang mở' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
-                                        {cls.status}
-                                    </span>
-                                </td>
-                                <td className="p-8 text-right">
-                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                        <button onClick={() => { setActiveClass(cls); setView('session'); }} className="p-3.5 bg-slate-900 text-white rounded-2xl shadow-xl hover:bg-orange-600 transition-all"><ChevronRight size={20}/></button>
-                                        <button onClick={async () => { if(window.confirm("Xóa lớp học?")) await deleteDoc(doc(db,"classes",cls.id)) }} className="p-3.5 bg-red-50 text-red-600 rounded-2xl hover:bg-red-600 hover:text-white transition-all border border-red-100 shadow-sm"><Trash2 size={20}/></button>
-                                    </div>
-                                </td>
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100">
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase">Mã HĐ</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase">Học Viên</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase">Khóa Học</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase">Học Phí</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase">Trạng Thái</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase text-center">Thao Tác</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {classes.length === 0 && <div className="p-32 text-center text-slate-300 font-black uppercase tracking-widest italic opacity-50">Hệ thống chưa ghi nhận lớp học nào.</div>}
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {filteredContracts.length === 0 ? (
+                                <tr><td colSpan={6} className="p-8 text-center text-slate-500 font-medium">Chưa có hợp đồng nào.</td></tr>
+                            ) : (
+                                filteredContracts.map(contract => (
+                                    <tr key={contract.id} className="hover:bg-slate-50/50 group transition-colors">
+                                        <td className="p-5 font-bold text-slate-700">{contract.contractCode}</td>
+                                        <td className="p-5">
+                                            <p className="font-bold text-slate-800">{contract.studentName}</p>
+                                            <p className="text-xs text-slate-500">{contract.studentPhone}</p>
+                                        </td>
+                                        <td className="p-5 font-bold text-slate-700 text-sm">{contract.courseName}</td>
+                                        <td className="p-5 font-black text-orange-600">{(contract.totalFee || 0).toLocaleString('vi-VN')} đ</td>
+                                        <td className="p-5">
+                                            <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase border ${
+                                                contract.contractStatus === 'NHÁP' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                                contract.contractStatus === 'ĐANG HIỆU LỰC' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                            }`}>
+                                                {contract.contractStatus}
+                                            </span>
+                                        </td>
+                                        <td className="p-5">
+                                            <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                
+                                                {/* NÚT XEM HỢP ĐỒNG */}
+                                                <button onClick={() => handleViewContract(contract)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white rounded-xl transition-all tooltip" title="Xem Chi Tiết">
+                                                    <Eye size={16} />
+                                                </button>
+
+                                                {/* NÚT TẢI XUỐNG DOCX */}
+                                                <button onClick={() => handleExportWord(contract)} className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white rounded-xl transition-all tooltip" title="Tải Word (Điền tự động)">
+                                                    <Download size={16} />
+                                                </button>
+
+                                                {contract.contractStatus === 'NHÁP' && (
+                                                    <button onClick={() => handleStatusChange(contract.id!, 'ĐANG HIỆU LỰC')} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl transition-all tooltip" title="Duyệt hiệu lực">
+                                                        <CheckCircle size={16} />
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleDelete(contract.id!)} className="p-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-xl transition-all tooltip" title="Xóa hợp đồng">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            {/* MODAL TẠO LỚP MỚI */}
-            {showCreateModal && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center z-[110] p-4 transition-all">
-                    <div className="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border border-white/20">
-                        <div className="p-10 bg-orange-500 text-white flex justify-between items-center shadow-2xl relative overflow-hidden">
-                            <GraduationCap className="absolute -right-6 -bottom-6 text-white/10 rotate-12" size={120}/>
-                            <div className="relative">
-                                <h3 className="text-3xl font-black italic tracking-tighter mb-1 uppercase">Mở lớp học 1-1</h3>
-                                <p className="text-xs font-bold text-orange-100 opacity-80 uppercase tracking-widest">Thiết lập lộ trình cá nhân hóa</p>
-                            </div>
-                            <button onClick={() => setShowCreateModal(false)} className="hover:rotate-90 transition-all p-3 bg-white/20 rounded-2xl border border-white/30"><X size={24} /></button>
+            {/* MODAL XEM CHI TIẾT HỢP ĐỒNG */}
+            {isViewModalOpen && selectedContract && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col">
+                        <div className="p-6 bg-blue-500 flex items-center justify-between text-white">
+                            <h2 className="text-xl font-black">Chi Tiết Hợp Đồng</h2>
+                            <button onClick={() => setIsViewModalOpen(false)} className="p-2 hover:bg-white/20 rounded-xl"><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleCreateClass} className="p-10 space-y-6">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tên lớp học / Mã định danh *</label>
-                                <input required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-orange-500/20 text-slate-800 transition-all" placeholder="VD: IELTS 1-1 NGUYỄN VĂN A" value={newClass.className} onChange={e => setNewClass({...newClass, className: e.target.value})} />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-5">
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-emerald-600">Giảng viên hướng dẫn</label>
-                                    <select required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-emerald-50 focus:border-emerald-500/20 text-slate-700" onChange={e => {
-                                        const t = teachers.find(x => x.id === e.target.value);
-                                        setNewClass({...newClass, teacherId: t.id, teacherName: t.name});
-                                    }}>
-                                        <option value="">-- Chọn giáo viên --</option>
-                                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Trợ giảng (PT)</label>
-                                    <select className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-orange-500/20 text-slate-700" onChange={e => {
-                                        const p = pts.find(x => x.id === e.target.value);
-                                        setNewClass({...newClass, ptId: p.id, ptName: p.name});
-                                    }}>
-                                        <option value="">-- Không có PT --</option>
-                                        {pts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
+                        
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Mã Hợp Đồng</p><p className="font-bold text-slate-800">{selectedContract.contractCode}</p></div>
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Họ và Tên Học Viên</p><p className="font-bold text-slate-800">{selectedContract.studentName}</p></div>
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Khóa Học Đăng Ký</p><p className="font-bold text-slate-800">{selectedContract.courseName}</p></div>
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Giảng Viên</p><p className="font-bold text-slate-800">{selectedContract.teacherName}</p></div>
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Số buổi học</p><p className="font-bold text-slate-800">{selectedContract.totalSessions} buổi ({selectedContract.sessionsPerWeek} buổi/tuần)</p></div>
+                                <div><p className="text-xs font-bold text-slate-400 uppercase">Tổng Học Phí</p><p className="font-black text-orange-600 text-lg">{(selectedContract.totalFee || 0).toLocaleString('vi-VN')} đ</p></div>
+                                
+                                <div className="col-span-2 bg-slate-50 p-4 rounded-xl mt-2">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Thanh toán: {selectedContract.paymentMethod === '1_LẦN' ? 'Đóng toàn bộ' : 'Chia làm 2 lần'}</p>
+                                    {selectedContract.paymentMethod === '1_LẦN' ? (
+                                        <p className="font-bold text-slate-700">Đã thanh toán đủ {(selectedContract.totalFee || 0).toLocaleString('vi-VN')} VNĐ</p>
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-2 text-sm font-bold text-slate-700">
+                                            <p>Đợt 1: {(selectedContract.firstInstallment || 0).toLocaleString('vi-VN')} đ</p>
+                                            <p>Đợt 2: {(selectedContract.secondInstallment || 0).toLocaleString('vi-VN')} đ (Hạn: {selectedContract.secondDeadline})</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-blue-600">Học viên chính (1-1)</label>
-                                <select required className="w-full px-6 py-4 bg-blue-50/50 text-blue-600 rounded-2xl font-black outline-none border-2 border-blue-100 hover:border-blue-300 transition-all" onChange={e => {
-                                    const s = students.find(x => x.id === e.target.value);
-                                    setNewClass({...newClass, studentId: s.id, studentName: s.name});
-                                }}>
-                                    <option value="">-- Chọn học viên đã nhập học --</option>
-                                    {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.phone})</option>)}
-                                </select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-5">
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Thứ học định kỳ hàng tuần</label>
-                                    <select className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-orange-500/20" value={newClass.studyDay} onChange={e => setNewClass({...newClass, studyDay: e.target.value})}>
-                                        {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ngày bắt đầu khóa học</label>
-                                    <input type="date" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-black outline-none border-2 border-transparent focus:border-orange-500/20" value={newClass.startDate} onChange={e => setNewClass({...newClass, startDate: e.target.value})} />
-                                </div>
-                            </div>
-
-                            <button type="submit" className="w-full bg-orange-500 text-white font-black py-6 rounded-[2.5rem] shadow-2xl shadow-orange-500/30 hover:bg-orange-600 transition-all mt-6 uppercase tracking-[0.2em] text-lg active:scale-95">XÁC NHẬN MỞ LỚP</button>
-                        </form>
+                        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                            <button onClick={() => setIsViewModalOpen(false)} className="px-6 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300">Đóng</button>
+                            <button onClick={() => handleExportWord(selectedContract)} className="px-6 py-2 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 flex items-center gap-2">
+                                <Download size={18} /> Tải File Word
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
+            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; }`}</style>
         </div>
     );
 };
 
-export default ClassManagement;
+export default ContractManagement;
