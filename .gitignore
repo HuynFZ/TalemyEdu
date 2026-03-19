@@ -4,13 +4,18 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
+# TỰ ĐỘNG BỎ QUA CÁC FILE CHỨA MÃ BẢO MẬT (CỰC KỲ QUAN TRỌNG)
+.env
+.env.local
+.env.*.local
+# Không bỏ qua file .env.example để đồng nghiệp biết cần điền gì
+!.env.example
+
+# Dependency directories
 node_modules
-dist
-dist-ssr
-*.local
+/dist
+/dist-ssr
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +27,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Docker
+.docker
