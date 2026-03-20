@@ -88,6 +88,12 @@ npm install express cors nodemailer
 ```cmd
 npm install html2pdf.js
 ```
+
+## 15. Cài đặt thư viện dotenv
+```cmd
+npm install dotenv
+```
+
 ## lưu ý trước khi chạy thì hãy bật server nodejs để có thể gửi được mail qua SMTP
 ```cmd
 node server.js
