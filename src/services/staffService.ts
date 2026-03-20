@@ -65,8 +65,14 @@ export const createStaff = async (data: StaffData & { password?: string }) => {
 /**
  * 2. Hàm lấy danh sách nhân sự Real-time (Dành cho trang Staff Management)
  */
-export const subscribeToStaffs = (callback: (data: StaffData[]) => void) => {
-    const q = query(collection(db, "staffs"), orderBy("createdAt", "desc"));
+// 1. Sửa lại hàm subscribe để có thể lọc loại trừ
+export const subscribeToStaffsFiltered = (excludePositions: string[], callback: (data: StaffData[]) => void) => {
+    const q = query(
+        collection(db, "staffs"),
+        where("position", "not-in", excludePositions), // Lọc loại trừ teacher và pt
+        orderBy("position"),
+        orderBy("createdAt", "desc")
+    );
     return onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(document => ({
             id: document.id,
@@ -142,6 +148,17 @@ export const deleteStaff = async (id: string) => {
         return true;
     } catch (error) {
         console.error("Lỗi xóa:", error);
+        throw error;
+    }
+};
+
+export const updateUserPassword = async (userId: string, newPassword: string) => {
+    try {
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, { password: newPassword });
+        return true;
+    } catch (error) {
+        console.error("Lỗi đổi mật khẩu:", error);
         throw error;
     }
 };

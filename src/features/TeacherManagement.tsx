@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, X, User, Phone, Mail, MapPin, Briefcase, FileText, CheckCircle2, XCircle } from 'lucide-react';
+import { 
+    Search, Plus, X, User, Phone, Mail, 
+    MapPin, Briefcase, FileText, CheckCircle2, XCircle,
+    AlertCircle, ChevronRight 
+} from 'lucide-react';
 import { 
     subscribeToStaffByPosition, 
     createStaff, 
@@ -7,9 +11,13 @@ import {
     deleteStaff, 
     StaffData 
 } from '../services/staffService';
+import { db } from '../firebase';
+import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 
 const TeacherManagement = () => {
+    // --- STATES ---
     const [teachers, setTeachers] = useState<StaffData[]>([]);
+    const [requests, setRequests] = useState<any[]>([]); // Danh sách yêu cầu đổi lịch chờ duyệt (Từ main)
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
 
@@ -17,23 +25,34 @@ const TeacherManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // Form data (QUAN TRỌNG: Luôn set cứng position là 'teacher' để khớp với database cũ và các chức năng khác)
+    // Form data (Luôn set cứng position là 'teacher')
     const initialFormState: StaffData & { password?: string } = {
         name: '', email: '', phone: '', address: '', gender: 'Male',
-        position: 'teacher', // KHÔI PHỤC LẠI 'teacher'
+        position: 'teacher', // Giữ nguyên 'teacher' để tương thích dữ liệu
         salary: 0, hireDate: new Date().toISOString().split('T')[0],
         status: 'active', cccd: '', bio: ''
     };
     
     const [formData, setFormData] = useState<StaffData & { password?: string }>(initialFormState);
 
+    // --- EFFECTS ---
     useEffect(() => {
-        // KHÔI PHỤC LẠI: Lấy những staff có position là 'teacher'
-        const unsubscribe = subscribeToStaffByPosition('teacher', setTeachers);
-        return () => unsubscribe();
+        // 1. Theo dõi danh sách giáo viên
+        const unsubscribeTeachers = subscribeToStaffByPosition('teacher', setTeachers);
+
+        // 2. Theo dõi yêu cầu đổi lịch đang chờ (Status = pending) (Từ main)
+        const qReq = query(collection(db, "scheduleRequests"), where("status", "==", "pending"));
+        const unsubscribeReq = onSnapshot(qReq, (snap) => {
+            setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        return () => {
+            unsubscribeTeachers();
+            unsubscribeReq();
+        };
     }, []);
 
-    // Lọc danh sách giảng viên
+    // --- LỌC DANH SÁCH GIẢNG VIÊN ---
     const filteredTeachers = teachers.filter(t => {
         const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             t.phone.includes(searchTerm) || 
@@ -42,32 +61,46 @@ const TeacherManagement = () => {
         return matchSearch && matchStatus;
     });
 
-    // Mở form thêm mới
+    // --- XỬ LÝ PHÊ DUYỆT LỊCH (TỪ MAIN) ---
+    const handleApproveSchedule = async (req: any) => {
+        try {
+            await updateDoc(doc(db, "staffs", req.teacherId), { fixedSchedule: req.newSchedule });
+            await updateDoc(doc(db, "scheduleRequests", req.id), { status: 'approved' });
+            alert("Đã phê duyệt lịch mới cho GV " + req.teacherName);
+        } catch (e) {
+            alert("Lỗi khi phê duyệt!");
+        }
+    };
+
+    const handleRejectSchedule = async (reqId: string) => {
+        if (window.confirm("Từ chối yêu cầu đổi lịch này?")) {
+            await updateDoc(doc(db, "scheduleRequests", reqId), { status: 'rejected' });
+        }
+    };
+
+    // --- MODAL HANDLERS ---
     const handleOpenAdd = () => {
         setEditingId(null);
         setFormData(initialFormState);
         setIsModalOpen(true);
     };
 
-    // Mở form xem/sửa khi bấm vào Card
     const handleCardClick = (teacher: StaffData) => {
         setEditingId(teacher.id!);
-        // Loại bỏ password cũ khi edit để tránh lỗi không mong muốn, form edit không cho đổi pass trực tiếp ở đây
         const editData = { ...teacher };
         setFormData(editData);
         setIsModalOpen(true);
     };
 
+    // --- CRUD HANDLERS ---
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             if (editingId) {
-                // Khi update, loại bỏ field password nếu có (thường Firebase Auth quản lý pass riêng)
                 const { password, id, ...updateData } = formData;
                 await updateStaff(editingId, updateData);
                 alert("Cập nhật thông tin giảng viên thành công!");
             } else {
-                // Khi tạo mới, truyền toàn bộ formData (bao gồm cả password để auth)
                 await createStaff(formData as any);
                 alert("Thêm giảng viên mới thành công!");
             }
@@ -79,7 +112,7 @@ const TeacherManagement = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm("Bạn có chắc chắn muốn xóa giảng viên này không? Hành động này không thể hoàn tác!")) {
+        if (window.confirm("Bạn có chắc chắn muốn xóa giảng viên này không? Dữ liệu hợp đồng liên quan có thể bị ảnh hưởng.")) {
             try {
                 await deleteStaff(id);
                 setIsModalOpen(false);
@@ -91,16 +124,52 @@ const TeacherManagement = () => {
     };
 
     return (
-        <div className="p-8 max-w-[1600px] mx-auto">
-            {/* --- HEADER & TOOLBAR --- */}
+        <div className="p-4 md:p-8 h-full flex flex-col bg-slate-50 relative overflow-y-auto custom-scrollbar max-w-[1600px] mx-auto">
+            
+            {/* --- PHẦN 1: DUYỆT ĐỔI LỊCH (TỪ MAIN) --- */}
+            {requests.length > 0 && (
+                <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <h3 className="font-black text-slate-800 uppercase tracking-widest text-xs flex items-center gap-2 mb-5">
+                        <AlertCircle className="text-orange-500" size={18} /> Phê duyệt yêu cầu đổi lịch ({requests.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {requests.map(req => (
+                            <div key={req.id} className="bg-white p-5 rounded-[2rem] border-2 border-orange-100 shadow-xl shadow-orange-100/10 flex flex-col gap-4">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-black">{req.teacherName?.charAt(0)}</div>
+                                        <div>
+                                            <p className="font-black text-slate-800 text-sm leading-tight">{req.teacherName}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Yêu cầu đổi lịch rảnh</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleApproveSchedule(req)} className="p-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all"><CheckCircle2 size={16}/></button>
+                                        <button onClick={() => handleRejectSchedule(req.id)} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"><X size={16}/></button>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                    <div className="flex-1 text-[9px] font-bold text-slate-400 line-through text-center leading-relaxed">
+                                        {req.oldSchedule?.length > 0 ? req.oldSchedule.join(", ") : "Trống"}
+                                    </div>
+                                    <ChevronRight size={14} className="text-orange-300 shrink-0" />
+                                    <div className="flex-1 text-[9px] font-black text-orange-600 text-center uppercase italic leading-relaxed">
+                                        {req.newSchedule?.join(", ")}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* --- PHẦN 2: HEADER & TOOLBAR (GIAO DIỆN HEAD) --- */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-                {/* Tiêu đề bên trái */}
                 <div className="w-full md:w-auto shrink-0">
                     <h1 className="text-3xl font-black text-slate-800 tracking-tight">Giảng Viên</h1>
                     <p className="text-slate-500 font-medium mt-1">Quản lý hồ sơ và đội ngũ giảng dạy</p>
                 </div>
 
-                {/* Tìm kiếm & Bộ lọc ở giữa */}
                 <div className="flex-1 flex flex-col sm:flex-row justify-center items-center gap-3 w-full max-w-2xl mx-auto">
                     <div className="relative w-full flex-1">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
@@ -123,7 +192,6 @@ const TeacherManagement = () => {
                     </select>
                 </div>
 
-                {/* Nút thêm mới bên phải */}
                 <div className="w-full md:w-auto flex justify-end shrink-0">
                     <button onClick={handleOpenAdd} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95 w-full md:w-auto">
                         <Plus size={20} /> <span className="hidden sm:inline">Thêm Giảng Viên</span>
@@ -131,7 +199,7 @@ const TeacherManagement = () => {
                 </div>
             </div>
 
-            {/* --- DANH SÁCH THẺ GIẢNG VIÊN --- */}
+            {/* --- PHẦN 3: DANH SÁCH THẺ GIẢNG VIÊN (GIAO DIỆN HEAD) --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredTeachers.map(teacher => (
                     <div 
@@ -139,7 +207,6 @@ const TeacherManagement = () => {
                         onClick={() => handleCardClick(teacher)}
                         className="bg-white rounded-[2rem] p-6 shadow-sm border-2 border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-xl transition-all duration-300 group relative overflow-hidden"
                     >
-                        {/* Status Badge */}
                         <div className="absolute top-6 right-6">
                             {teacher.status === 'active' ? (
                                 <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-widest rounded-xl border border-green-100">
@@ -156,7 +223,7 @@ const TeacherManagement = () => {
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-50 text-blue-600 flex items-center justify-center font-black text-2xl shadow-inner border border-blue-100 group-hover:scale-110 transition-transform duration-300">
                                 {teacher.name.charAt(0)}
                             </div>
-                            <div className="pr-20"> {/* Padding right to avoid overlap with status badge */}
+                            <div className="pr-20">
                                 <h3 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors line-clamp-1">{teacher.name}</h3>
                                 <p className="text-sm font-bold text-slate-400 mt-0.5 flex items-center gap-1">
                                     <Briefcase size={14}/> Giảng Viên
@@ -189,7 +256,7 @@ const TeacherManagement = () => {
                 )}
             </div>
 
-            {/* --- MODAL THÊM / SỬA GIẢNG VIÊN --- */}
+            {/* --- MODAL THÊM / SỬA GIẢNG VIÊN (GIAO DIỆN HEAD) --- */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -202,7 +269,6 @@ const TeacherManagement = () => {
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 h-[70vh] overflow-y-auto custom-scrollbar space-y-6">
-                            {/* Thông tin cơ bản */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Họ và Tên *</label>
@@ -243,7 +309,6 @@ const TeacherManagement = () => {
 
                             <hr className="border-slate-100" />
 
-                            {/* Cài đặt chuyên môn & Hệ thống */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-1.5">
                                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ngày vào làm</label>
