@@ -77,6 +77,22 @@ npm install gapi-script @types/gapi @types/gapi.auth2
 docker-compose restart frontend
 ```
 
+## 13. Tạo API Backend
+```cmd
+npm init -y
+npm install express cors nodemailer
+```
+
+
+## 14. Cài đặt thư viện html2pdf
+```cmd
+npm install html2pdf.js
+```
+## lưu ý trước khi chạy thì hãy bật server nodejs để có thể gửi được mail qua SMTP
+```cmd
+node server.js
+```
+
 # 🚀 Hướng dẫn thiết lập môi trường (Local Setup)
 
 Dự án này sử dụng Google Calendar API để quản lý lịch học. Để chạy dự án trên máy cá nhân, vui lòng làm theo các bước sau:

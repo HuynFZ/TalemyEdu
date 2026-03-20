@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 
 export interface StudentData {
     id?: string;
@@ -52,4 +52,18 @@ export const deleteStudent = async (id: string) => {
         await deleteDoc(doc(db, COLLECTION_NAME, id));
         return true;
     } catch (error) { throw error; }
+};
+
+export const getStudentById = async (id: string) => {
+    try {
+        const docRef = doc(db, COLLECTION_NAME, id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() } as StudentData;
+        }
+        return null;
+    } catch (error) {
+        console.error("Lỗi lấy thông tin học viên:", error);
+        return null;
+    }
 };
