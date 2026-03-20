@@ -7,6 +7,7 @@ import { db } from '../firebase';
 import { collection, addDoc, onSnapshot, query, serverTimestamp, orderBy, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import ClassManagement from './ClassManagement';
+import { getStaffProfile } from '../services/staffService'; // Đảm bảo đã import hàm này
 
 const Course = () => {
     const { user } = useAuth();
@@ -15,6 +16,7 @@ const Course = () => {
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCourse, setSelectedCourse] = useState<{id: string, name: string} | null>(null);
+    const [loading, setLoading] = useState(true);
 
     // Form tạo khóa học đầy đủ thông tin
     const [newCourse, setNewCourse] = useState({
@@ -28,18 +30,40 @@ const Course = () => {
 
     useEffect(() => {
         if (!user) return;
+
         if (user.role === 'admin') {
+            // ADMIN: Xem tất cả khóa học
             const q = query(collection(db, "courses"), orderBy("createdAt", "desc"));
             const unsubscribe = onSnapshot(q, (snapshot) => {
                 setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                setLoading(false);
             });
             return () => unsubscribe();
-        } else {
-            const q = query(collection(db, "classes"), where("teacherName", "==", "Nguyễn Nhật Huy"));
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                setTeacherClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            });
-            return () => unsubscribe();
+        } else if (user.role === 'teacher') {
+            // GIẢNG VIÊN: Chỉ xem lớp của mình
+            const fetchTeacherDataAndClasses = async () => {
+                // 1. Tìm hồ sơ staff dựa trên email đang đăng nhập
+                const profile = await getStaffProfile(user.email);
+
+                if (profile && profile.id) {
+                    // 2. Truy vấn lớp học dựa trên teacherId (Chính xác nhất)
+                    // hoặc dùng profile.name nếu bạn chỉ lưu tên
+                    const q = query(
+                        collection(db, "classes"),
+                        where("teacherId", "==", profile.id) // Lọc chính xác theo ID giảng viên
+                    );
+
+                    const unsubscribe = onSnapshot(q, (snapshot) => {
+                        setTeacherClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                        setLoading(false);
+                    });
+                    return unsubscribe;
+                }
+            };
+
+            let unsub: any;
+            fetchTeacherDataAndClasses().then(u => unsub = u);
+            return () => unsub && unsub();
         }
     }, [user]);
 
