@@ -13,11 +13,15 @@
     "@emailjs/browser": "^4.4.1",
     "@hello-pangea/dnd": "^18.0.1",
     "@tailwindcss/postcss": "^4.2.1",
+    "cors": "^2.8.6",
     "docxtemplater": "^3.68.3",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "firebase": "^12.10.0",
     "gapi-script": "^1.2.0",
+    "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.577.0",
+    "nodemailer": "^8.0.3",
     "pizzip": "^3.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -42,5 +46,18 @@
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.0"
-  }
+  },
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "main": "eslint.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HuynFZ/TalemyEdu.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HuynFZ/TalemyEdu/issues"
+  },
+  "homepage": "https://github.com/HuynFZ/TalemyEdu#readme"
 }
