@@ -76,3 +76,14 @@ npm install gapi-script @types/gapi @types/gapi.auth2
 ```cmd
 docker-compose restart frontend
 ```
+
+# 🚀 Hướng dẫn thiết lập môi trường (Local Setup)
+
+Dự án này sử dụng Google Calendar API để quản lý lịch học. Để chạy dự án trên máy cá nhân, vui lòng làm theo các bước sau:
+
+### 1. Thiết lập File Môi Trường
+1. Copy file `.env.example` thành file `.env`:
+   ```bash
+   cp .env.example .env
+   
+### 2. Liên hệ admin để lấy key (Mạnh Huy)
