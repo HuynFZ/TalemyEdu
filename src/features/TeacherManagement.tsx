@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit, Trash2, X, User, Phone, Mail, MapPin, Briefcase, FileText } from 'lucide-react';
+import { Search, Plus, X, User, Phone, Mail, MapPin, Briefcase, FileText, CheckCircle2, XCircle } from 'lucide-react';
 import { 
     subscribeToStaffByPosition, 
     createStaff, 
@@ -11,223 +11,290 @@ import {
 const TeacherManagement = () => {
     const [teachers, setTeachers] = useState<StaffData[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
 
     // State cho Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // Form data (Luôn set cứng position là 'teacher')
-    const [formData, setFormData] = useState<StaffData & { password?: string }>({
-        name: '',
-        email: '',
-        phone: '',
-        address: '',
-        gender: 'Male',
-        position: 'teacher', // QUAN TRỌNG: Cố định là teacher
-        salary: 0,
-        hireDate: new Date().toISOString().split('T')[0],
-        status: 'active',
-        cccd: '',
-        bio: ''
-    });
+    // Form data (QUAN TRỌNG: Luôn set cứng position là 'teacher' để khớp với database cũ và các chức năng khác)
+    const initialFormState: StaffData & { password?: string } = {
+        name: '', email: '', phone: '', address: '', gender: 'Male',
+        position: 'teacher', // KHÔI PHỤC LẠI 'teacher'
+        salary: 0, hireDate: new Date().toISOString().split('T')[0],
+        status: 'active', cccd: '', bio: ''
+    };
+    
+    const [formData, setFormData] = useState<StaffData & { password?: string }>(initialFormState);
 
     useEffect(() => {
-        // Chỉ lấy những staff có position là 'teacher'
+        // KHÔI PHỤC LẠI: Lấy những staff có position là 'teacher'
         const unsubscribe = subscribeToStaffByPosition('teacher', setTeachers);
         return () => unsubscribe();
     }, []);
 
-    const filteredTeachers = teachers.filter(t => 
-        t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        t.phone.includes(searchTerm) ||
-        t.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Lọc danh sách giảng viên
+    const filteredTeachers = teachers.filter(t => {
+        const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            t.phone.includes(searchTerm) || 
+                            (t.email && t.email.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchStatus = statusFilter === 'All' || t.status === statusFilter;
+        return matchSearch && matchStatus;
+    });
 
-    const handleOpenCreate = () => {
+    // Mở form thêm mới
+    const handleOpenAdd = () => {
         setEditingId(null);
-        setFormData({
-            name: '', email: '', phone: '', address: '', gender: 'Male',
-            position: 'teacher', salary: 0, hireDate: new Date().toISOString().split('T')[0],
-            status: 'active', cccd: '', bio: '', password: '123' // Pass mặc định khi tạo mới
-        });
+        setFormData(initialFormState);
         setIsModalOpen(true);
     };
 
-    const handleOpenEdit = (teacher: StaffData) => {
+    // Mở form xem/sửa khi bấm vào Card
+    const handleCardClick = (teacher: StaffData) => {
         setEditingId(teacher.id!);
-        setFormData({ ...teacher });
+        // Loại bỏ password cũ khi edit để tránh lỗi không mong muốn, form edit không cho đổi pass trực tiếp ở đây
+        const editData = { ...teacher };
+        setFormData(editData);
         setIsModalOpen(true);
-    };
-
-    const handleDelete = async (id: string) => {
-        if (window.confirm("Bạn có chắc chắn muốn xóa giáo viên này? Dữ liệu hợp đồng liên quan có thể bị ảnh hưởng.")) {
-            try {
-                await deleteStaff(id);
-                alert("Xóa thành công!");
-            } catch (error) {
-                alert("Lỗi khi xóa giáo viên!");
-            }
-        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
             if (editingId) {
-                // Xóa thuộc tính password nếu có trước khi update
+                // Khi update, loại bỏ field password nếu có (thường Firebase Auth quản lý pass riêng)
                 const { password, id, ...updateData } = formData;
                 await updateStaff(editingId, updateData);
-                alert("Cập nhật thành công!");
+                alert("Cập nhật thông tin giảng viên thành công!");
             } else {
-                await createStaff(formData);
-                alert("Thêm giáo viên thành công!");
+                // Khi tạo mới, truyền toàn bộ formData (bao gồm cả password để auth)
+                await createStaff(formData as any);
+                alert("Thêm giảng viên mới thành công!");
             }
             setIsModalOpen(false);
         } catch (error) {
+            console.error(error);
             alert("Có lỗi xảy ra, vui lòng thử lại!");
         }
     };
 
+    const handleDelete = async (id: string) => {
+        if (window.confirm("Bạn có chắc chắn muốn xóa giảng viên này không? Hành động này không thể hoàn tác!")) {
+            try {
+                await deleteStaff(id);
+                setIsModalOpen(false);
+            } catch (error) {
+                console.error(error);
+                alert("Không thể xóa giảng viên!");
+            }
+        }
+    };
+
     return (
-        <div className="p-4 md:p-8 h-full flex flex-col bg-slate-50 relative overflow-y-auto custom-scrollbar">
-            {/* HEADER */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                        <Briefcase className="text-blue-500" size={32} /> Quản lý Giáo viên
-                    </h2>
-                    <p className="text-slate-500 text-sm italic mt-1">Danh sách đội ngũ giảng viên học thuật</p>
+        <div className="p-8 max-w-[1600px] mx-auto">
+            {/* --- HEADER & TOOLBAR --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                {/* Tiêu đề bên trái */}
+                <div className="w-full md:w-auto shrink-0">
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">Giảng Viên</h1>
+                    <p className="text-slate-500 font-medium mt-1">Quản lý hồ sơ và đội ngũ giảng dạy</p>
                 </div>
-                
-                <div className="flex w-full md:w-auto gap-3">
-                    <div className="relative flex-1 md:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+
+                {/* Tìm kiếm & Bộ lọc ở giữa */}
+                <div className="flex-1 flex flex-col sm:flex-row justify-center items-center gap-3 w-full max-w-2xl mx-auto">
+                    <div className="relative w-full flex-1">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                         <input 
-                            type="text" placeholder="Tìm tên, SĐT, Email..." 
-                            className="w-full pl-10 pr-4 py-3 bg-white rounded-xl border border-slate-200 outline-none focus:border-blue-500 text-sm font-medium"
-                            value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
+                            type="text" 
+                            placeholder="Tìm kiếm theo tên, SĐT, Email..." 
+                            className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-100 rounded-2xl text-sm font-semibold focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50/50 transition-all shadow-sm" 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
                         />
                     </div>
-                    <button onClick={handleOpenCreate} className="bg-blue-500 text-white px-5 py-3 rounded-xl font-bold shadow-md hover:bg-blue-600 flex items-center gap-2 text-sm whitespace-nowrap">
-                        <Plus size={18} /> Thêm Giáo Viên
+                    <select 
+                        className="w-full sm:w-48 px-4 py-3 bg-white border-2 border-slate-100 rounded-2xl text-sm font-bold text-slate-600 focus:outline-none focus:border-blue-400 transition-all shadow-sm cursor-pointer"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                        <option value="All">Tất cả trạng thái</option>
+                        <option value="active">Đang giảng dạy</option>
+                        <option value="inactive">Tạm nghỉ</option>
+                    </select>
+                </div>
+
+                {/* Nút thêm mới bên phải */}
+                <div className="w-full md:w-auto flex justify-end shrink-0">
+                    <button onClick={handleOpenAdd} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95 w-full md:w-auto">
+                        <Plus size={20} /> <span className="hidden sm:inline">Thêm Giảng Viên</span>
                     </button>
                 </div>
             </div>
 
-            {/* DANH SÁCH GIÁO VIÊN */}
+            {/* --- DANH SÁCH THẺ GIẢNG VIÊN --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredTeachers.map((teacher) => (
-                    <div key={teacher.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow relative group">
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-black text-xl">
-                                    {teacher.name.charAt(0)}
-                                </div>
-                                <div>
-                                    <h3 className="font-black text-lg text-slate-800">{teacher.name}</h3>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${teacher.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-                                        {teacher.status === 'active' ? 'ĐANG DẠY' : 'TẠM NGHỈ'}
-                                    </span>
-                                </div>
+                {filteredTeachers.map(teacher => (
+                    <div 
+                        key={teacher.id} 
+                        onClick={() => handleCardClick(teacher)}
+                        className="bg-white rounded-[2rem] p-6 shadow-sm border-2 border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-xl transition-all duration-300 group relative overflow-hidden"
+                    >
+                        {/* Status Badge */}
+                        <div className="absolute top-6 right-6">
+                            {teacher.status === 'active' ? (
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-widest rounded-xl border border-green-100">
+                                    <CheckCircle2 size={12}/> Đang dạy
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200">
+                                    <XCircle size={12}/> Tạm nghỉ
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-50 text-blue-600 flex items-center justify-center font-black text-2xl shadow-inner border border-blue-100 group-hover:scale-110 transition-transform duration-300">
+                                {teacher.name.charAt(0)}
                             </div>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleOpenEdit(teacher)} className="p-2 bg-slate-50 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"><Edit size={16}/></button>
-                                <button onClick={() => handleDelete(teacher.id!)} className="p-2 bg-slate-50 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={16}/></button>
+                            <div className="pr-20"> {/* Padding right to avoid overlap with status badge */}
+                                <h3 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors line-clamp-1">{teacher.name}</h3>
+                                <p className="text-sm font-bold text-slate-400 mt-0.5 flex items-center gap-1">
+                                    <Briefcase size={14}/> Giảng Viên
+                                </p>
                             </div>
                         </div>
 
-                        <div className="space-y-2 mt-5 text-sm">
-                            <p className="text-slate-600 flex items-center gap-3"><Phone size={16} className="text-slate-400"/> <strong>{teacher.phone}</strong></p>
-                            <p className="text-slate-600 flex items-center gap-3"><Mail size={16} className="text-slate-400"/> {teacher.email}</p>
-                            <p className="text-slate-600 flex items-center gap-3"><FileText size={16} className="text-slate-400"/> CCCD: {teacher.cccd || 'Chưa cập nhật'}</p>
-                            {teacher.bio && (
-                                <p className="text-slate-500 text-xs italic bg-slate-50 p-3 rounded-xl mt-3 line-clamp-2">"{teacher.bio}"</p>
-                            )}
+                        <div className="space-y-3 pt-4 border-t border-slate-50">
+                            <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
+                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0">
+                                    <Phone size={14} className="text-slate-400"/>
+                                </div>
+                                {teacher.phone || 'Chưa cập nhật SĐT'}
+                            </div>
+                            <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
+                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0">
+                                    <Mail size={14} className="text-slate-400"/>
+                                </div>
+                                <span className="truncate">{teacher.email || 'Chưa cập nhật Email'}</span>
+                            </div>
                         </div>
                     </div>
                 ))}
+                
+                {filteredTeachers.length === 0 && (
+                    <div className="col-span-full py-12 text-center bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+                        <User className="mx-auto text-slate-300 mb-3" size={48}/>
+                        <p className="text-slate-500 font-bold">Không tìm thấy giảng viên nào phù hợp.</p>
+                    </div>
+                )}
             </div>
 
-            {/* MODAL THÊM / SỬA GIÁO VIÊN */}
+            {/* --- MODAL THÊM / SỬA GIẢNG VIÊN --- */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2rem] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-6 bg-blue-500 text-white flex justify-between items-center shrink-0">
-                            <h2 className="text-xl font-black">{editingId ? 'Cập nhật Giáo Viên' : 'Thêm Giáo Viên Mới'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors"><X size={20} /></button>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-xl font-black text-slate-800">{editingId ? 'Hồ Sơ Giảng Viên' : 'Thêm Giảng Viên Mới'}</h2>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Thông tin chi tiết</p>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors"><X size={20}/></button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto custom-scrollbar space-y-6">
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* THÔNG TIN CƠ BẢN */}
-                                <div className="space-y-4">
-                                    <h3 className="font-bold text-slate-800 border-b pb-2">1. Thông tin cơ bản</h3>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Họ và Tên *</label>
-                                        <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Số điện thoại *</label>
-                                        <input type="tel" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Email (Dùng làm Username) *</label>
-                                        <input type="email" required disabled={!!editingId} className={`w-full p-3 border border-slate-200 rounded-xl outline-none text-sm font-bold ${editingId ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-slate-50 focus:border-blue-500'}`} value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Giới tính</label>
-                                        <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value as any})}>
-                                            <option value="Male">Nam</option><option value="Female">Nữ</option><option value="Other">Khác</option>
-                                        </select>
+                        <form onSubmit={handleSubmit} className="p-6 h-[70vh] overflow-y-auto custom-scrollbar space-y-6">
+                            {/* Thông tin cơ bản */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Họ và Tên *</label>
+                                    <div className="relative">
+                                        <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input type="text" required className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                     </div>
                                 </div>
-
-                                {/* THÔNG TIN HÀNH CHÍNH & TIỂU SỬ */}
-                                <div className="space-y-4">
-                                    <h3 className="font-bold text-slate-800 border-b pb-2">2. Hành chính & Tiểu sử</h3>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Số CCCD *</label>
-                                        <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.cccd} onChange={e => setFormData({...formData, cccd: e.target.value})} />
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Số Điện Thoại *</label>
+                                    <div className="relative">
+                                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input type="tel" required className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Địa chỉ thường trú *</label>
-                                        <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Email *</label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input type="email" required className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">Lương Cơ Bản</label>
-                                            <input type="number" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.salary} onChange={e => setFormData({...formData, salary: Number(e.target.value)})} />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase">Ngày nhận việc</label>
-                                            <input type="date" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.hireDate} onChange={e => setFormData({...formData, hireDate: e.target.value})} />
-                                        </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">CCCD / CMND</label>
+                                    <div className="relative">
+                                        <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.cccd} onChange={e => setFormData({...formData, cccd: e.target.value})} />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Trạng thái làm việc</label>
-                                        <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-bold" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})}>
-                                            <option value="active">Đang giảng dạy</option><option value="inactive">Tạm nghỉ / Đã nghỉ</option>
-                                        </select>
+                                </div>
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Địa chỉ</label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input type="text" className="w-full pl-10 pr-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Bio / Tiểu sử học thuật (Sẽ hiện lên hợp đồng hoặc website)</label>
-                                <textarea className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 text-sm font-medium h-24 resize-none" placeholder="VD: IELTS 8.0, Tốt nghiệp ĐH Ngoại Thương..." value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} />
+                            <hr className="border-slate-100" />
+
+                            {/* Cài đặt chuyên môn & Hệ thống */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Ngày vào làm</label>
+                                    <input type="date" required className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.hireDate} onChange={e => setFormData({...formData, hireDate: e.target.value})} />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Trạng thái hoạt động</label>
+                                    <select className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none cursor-pointer" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as 'active' | 'inactive'})}>
+                                        <option value="active">Đang giảng dạy</option>
+                                        <option value="inactive">Tạm nghỉ</option>
+                                    </select>
+                                </div>
+                                {!editingId && (
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Mật khẩu đăng nhập hệ thống *</label>
+                                        <input type="password" required className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none" value={formData.password || ''} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Nhập mật khẩu cho tài khoản giảng viên..." />
+                                    </div>
+                                )}
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tiểu sử học thuật (Bio) - Sẽ hiện trên Website/Profile</label>
+                                    <textarea className="w-full p-4 bg-white border-2 border-slate-100 rounded-xl text-sm font-semibold text-slate-700 focus:border-blue-400 focus:bg-blue-50/30 transition-all outline-none min-h-[100px]" placeholder="VD: IELTS 8.0, Cựu sinh viên FTU..." value={formData.bio} onChange={e => setFormData({...formData, bio: e.target.value})} />
+                                </div>
                             </div>
 
-                            <div className="pt-4 border-t border-slate-100 flex gap-3 justify-end">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">Hủy</button>
-                                <button type="submit" className="px-8 py-3 bg-blue-500 text-white font-black rounded-xl hover:bg-blue-600 shadow-lg shadow-blue-200">
-                                    {editingId ? 'LƯU THAY ĐỔI' : 'TẠO GIÁO VIÊN MỚI'}
-                                </button>
+                            <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row gap-3 justify-between items-center">
+                                {editingId ? (
+                                    <button type="button" onClick={() => handleDelete(editingId)} className="w-full md:w-auto px-6 py-4 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors uppercase text-sm tracking-widest">
+                                        Xóa Giảng Viên
+                                    </button>
+                                ) : <div />} 
+                                
+                                <div className="flex gap-3 w-full md:w-auto">
+                                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 md:flex-none px-6 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors uppercase text-sm tracking-widest">
+                                        Đóng
+                                    </button>
+                                    <button type="submit" className="flex-1 md:flex-none px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-xl hover:shadow-lg shadow-blue-200 hover:-translate-y-0.5 transition-all active:scale-[0.98] uppercase text-sm tracking-widest">
+                                        {editingId ? 'LƯU THAY ĐỔI' : 'TẠO MỚI'}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
+            
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; } 
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 20px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            `}</style>
         </div>
     );
 };
