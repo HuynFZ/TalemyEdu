@@ -1,29 +1,23 @@
 import { db } from '../firebase';
 import { 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  serverTimestamp,
-  Timestamp 
+  collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp,
+  doc, updateDoc, arrayUnion, increment // BỔ SUNG CÁC HÀM NÀY
 } from 'firebase/firestore';
 
-// 1. Định nghĩa Interface dựa trên Schema và UI thực tế
+// 1. Định nghĩa Interface
 export interface CourseData {
   id?: string;
   name: string;
   description: string;
   level: 'Beginner' | 'Intermediate' | 'Advanced';
   price: number;
-  duration: number; // Số buổi học
+  duration: number; 
   status: 'active' | 'inactive' | 'upcoming';
-  instructor: string;   // Thêm từ UI
-  assistant: string;    // Thêm từ UI
-  studentsCount: number; // Thêm từ UI
+  instructor: string;   
+  assistant: string;    
+  studentsCount: number; 
   createdAt?: Timestamp;
 }
-
 const COLLECTION_NAME = "courses";
 
 // 2. Hàm lấy danh sách khóa học Real-time
@@ -52,3 +46,4 @@ export const createCourse = async (course: Omit<CourseData, 'id' | 'createdAt'>)
     throw error;
   }
 };
+
