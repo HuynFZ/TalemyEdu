@@ -1,3 +1,4 @@
+import 'dotenv/config'; // <-- Cú pháp chuẩn cho ES Module để đọc file .env
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
@@ -7,14 +8,14 @@ app.use(cors());
 // Tăng giới hạn dung lượng để nhận file Word Base64
 app.use(express.json({ limit: '10mb' })); 
 
-// CẤU HÌNH SMTP GMAIL DOANH NGHIỆP
+// CẤU HÌNH SMTP GMAIL
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true, // dùng SSL
     auth: {
-        user: '23521417@gm.uit.edu.vn', 
-        pass: 'lnkg xdpf euav qhdb'     
+        user: process.env.EMAIL_USER, // Lấy từ file .env
+        pass: process.env.EMAIL_PASS  // Lấy từ file .env (nhớ viết liền, không có dấu cách)
     }
 });
 
@@ -23,7 +24,7 @@ app.post('/api/send-contract', async (req, res) => {
 
     try {
         const mailOptions = {
-            from: '"Trung tâm anh ngữ Talemy" <23521417@gm.uit.edu.vn>',
+            from: '"Trung tâm anh ngữ Talemy" <' + process.env.EMAIL_USER + '>',
             to: studentEmail,
             subject: `[Quan Trọng] Hợp Đồng Nhập Học - Học viên ${studentName}`,
             html: `
