@@ -175,10 +175,15 @@ const ContractManagement = () => {
                     base64Reader.readAsDataURL(out);
                     base64Reader.onloadend = async () => {
                         const base64data = base64Reader.result;
-                        const apiResponse = await fetch('http://localhost:3001/api/send-contract', {
+                        const apiResponse = await fetch('/api/send-contract', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ studentEmail, studentName: contract.studentName, contractCode: contract.contractCode, fileBase64: base64data })
+                            body: JSON.stringify({
+                                studentEmail,
+                                studentName: contract.studentName,
+                                contractCode: contract.contractCode,
+                                fileBase64: base64data
+                            })
                         });
                         const result = await apiResponse.json();
                         if (result.success) alert(`Đã gửi thành công đến: ${studentEmail}!`);
