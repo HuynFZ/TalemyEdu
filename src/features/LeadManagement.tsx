@@ -285,7 +285,7 @@ const LeadManagement = () => {
             {/* Header, Search & Filter */}
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Sales Pipeline</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Quy trình tư vấn</h2>
                     <p className="text-slate-500 text-sm italic">Quản lý và theo dõi tiến độ tư vấn học viên</p>
                 </div>
                 <div className="w-full xl:max-w-3xl flex flex-col sm:flex-row gap-3">

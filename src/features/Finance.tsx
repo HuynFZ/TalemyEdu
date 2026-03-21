@@ -33,8 +33,8 @@ const Finance = () => {
             {/* Header */}
             <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800">Quản lý Tài chính</h2>
-                    <p className="text-slate-500 text-sm">Theo dõi doanh thu và chi phí hệ thống</p>
+                    <h2 className="text-2xl font-black text-slate-800">Quản lý tài chính</h2>
+                    <p className="text-slate-500 text-sm italic">Theo dõi doanh thu và chi phí hệ thống</p>
                 </div>
                 <div className="flex gap-3">
                     <button className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all">

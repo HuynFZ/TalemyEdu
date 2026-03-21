@@ -27,15 +27,15 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
-    { id: 'pipeline', label: 'Sales Pipeline', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
-    { id: 'contract', label: 'Contracts', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
-    { id: 'course', label: 'Course', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
-    { id: 'teacher', label: 'Teachers', icon: <BookUser size={20} />, roles: ['admin'] },
-    { id: 'student', label: 'Students', icon: <UserCheck size={20} />, roles: ['admin', 'sale', 'finance'] },
-    { id: 'finance', label: 'Finance', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
-    { id: 'staff', label: 'Staff', icon: <UsersIcon size={20} />, roles: ['admin'] },
-    { id: 'info', label: 'Infomation', icon: <UserCircle size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
+    { id: 'dashboard', label: 'Bảng điều khiển', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
+    { id: 'pipeline', label: 'Quy trình tư vấn', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
+    { id: 'contract', label: 'Hợp đồng', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
+    { id: 'course', label: 'Khóa học', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
+    { id: 'teacher', label: 'Giảng viên', icon: <BookUser size={20} />, roles: ['admin'] },
+    { id: 'student', label: 'Học viên', icon: <UserCheck size={20} />, roles: ['admin', 'sale', 'finance'] },
+    { id: 'finance', label: 'Tài chính', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
+    { id: 'staff', label: 'Nhân sự vận hành', icon: <UsersIcon size={20} />, roles: ['admin'] },
+    { id: 'info', label: 'Thông tin cá nhân', icon: <UserCircle size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
 ];
 
 // --- COMPONENT CHÍNH CỦA HỆ THỐNG QUẢN TRỊ ---
