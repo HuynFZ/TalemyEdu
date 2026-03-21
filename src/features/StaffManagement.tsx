@@ -151,7 +151,7 @@ const StaffManagement = () => {
             {/* --- PHẦN 2: HEADER & NÚT THÊM NHÂN VIÊN --- */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight italic uppercase">Bộ phận Vận hành</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Quản lý nhân sự</h2>
                     <p className="text-slate-500 text-sm font-medium italic">Quản lý Admin, Tư vấn viên & Kế toán</p>
                 </div>
                 <div className="flex w-full md:w-auto gap-3">

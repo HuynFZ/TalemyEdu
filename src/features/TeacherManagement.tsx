@@ -166,8 +166,8 @@ const TeacherManagement = () => {
             {/* --- PHẦN 2: HEADER & TOOLBAR (GIAO DIỆN HEAD) --- */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                 <div className="w-full md:w-auto shrink-0">
-                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">Giảng Viên</h1>
-                    <p className="text-slate-500 font-medium mt-1">Quản lý hồ sơ và đội ngũ giảng dạy</p>
+                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Quản lý giảng viên</h1>
+                    <p className="text-slate-500 font-medium text-sm mt-1 italic">Quản lý hồ sơ và đội ngũ giảng dạy</p>
                 </div>
 
                 <div className="flex-1 flex flex-col sm:flex-row justify-center items-center gap-3 w-full max-w-2xl mx-auto">
@@ -199,61 +199,64 @@ const TeacherManagement = () => {
                 </div>
             </div>
 
-            {/* --- PHẦN 3: DANH SÁCH THẺ GIẢNG VIÊN (GIAO DIỆN HEAD) --- */}
+            {/* --- PHẦN 3: DANH SÁCH THẺ GIẢNG VIÊN --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredTeachers.map(teacher => (
-                    <div 
-                        key={teacher.id} 
+                    <div
+                        key={teacher.id}
                         onClick={() => handleCardClick(teacher)}
-                        className="bg-white rounded-[2rem] p-6 shadow-sm border-2 border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-xl transition-all duration-300 group relative overflow-hidden"
+                        className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-xl transition-all duration-300 group relative flex flex-col"
                     >
-                        <div className="absolute top-6 right-6">
-                            {teacher.status === 'active' ? (
-                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-widest rounded-xl border border-green-100">
-                                    <CheckCircle2 size={12}/> Đang dạy
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200">
-                                    <XCircle size={12}/> Tạm nghỉ
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-50 text-blue-600 flex items-center justify-center font-black text-2xl shadow-inner border border-blue-100 group-hover:scale-110 transition-transform duration-300">
+                        {/* Phần Header: Avatar + (Tên & Trạng thái) */}
+                        <div className="flex items-start gap-4 mb-6">
+                            {/* Avatar (Đã đưa về màu cũ: Nền xanh nhạt, chữ xanh đậm) */}
+                            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-2xl shadow-inner border border-blue-100 shrink-0 group-hover:scale-105 transition-transform duration-300">
                                 {teacher.name.charAt(0)}
                             </div>
-                            <div className="pr-20">
-                                <h3 className="font-black text-slate-800 text-lg group-hover:text-blue-600 transition-colors line-clamp-1">{teacher.name}</h3>
-                                <p className="text-sm font-bold text-slate-400 mt-0.5 flex items-center gap-1">
-                                    <Briefcase size={14}/> Giảng Viên
-                                </p>
+
+                            {/* Thông tin Text & Badge */}
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-black text-slate-800 text-lg leading-tight truncate group-hover:text-blue-600 transition-colors">
+                                    {teacher.name}
+                                </h3>
+
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+                                        <Briefcase size={12}/> Giảng Viên
+                                    </p>
+
+                                    {/* Trạng thái nằm bên cạnh */}
+                                    {teacher.status === 'active' ? (
+                                        <span className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black uppercase rounded-lg border border-emerald-100 whitespace-nowrap">
+                                <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
+                                Đang dạy
+                            </span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-black uppercase rounded-lg border border-slate-200 whitespace-nowrap">
+                                Tạm nghỉ
+                            </span>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        <div className="space-y-3 pt-4 border-t border-slate-50">
+                        {/* Phần thông tin liên hệ */}
+                        <div className="space-y-3 pt-5 border-t border-slate-50">
                             <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
-                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0">
-                                    <Phone size={14} className="text-slate-400"/>
+                                <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-blue-50 transition-colors">
+                                    <Phone size={14} className="text-slate-400 group-hover:text-blue-500"/>
                                 </div>
-                                {teacher.phone || 'Chưa cập nhật SĐT'}
+                                <span className="font-bold">{teacher.phone || 'Chưa cập nhật SĐT'}</span>
                             </div>
                             <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
-                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center shrink-0">
-                                    <Mail size={14} className="text-slate-400"/>
+                                <div className="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 group-hover:bg-blue-50 transition-colors">
+                                    <Mail size={14} className="text-slate-400 group-hover:text-blue-500"/>
                                 </div>
                                 <span className="truncate">{teacher.email || 'Chưa cập nhật Email'}</span>
                             </div>
                         </div>
                     </div>
                 ))}
-                
-                {filteredTeachers.length === 0 && (
-                    <div className="col-span-full py-12 text-center bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                        <User className="mx-auto text-slate-300 mb-3" size={48}/>
-                        <p className="text-slate-500 font-bold">Không tìm thấy giảng viên nào phù hợp.</p>
-                    </div>
-                )}
             </div>
 
             {/* --- MODAL THÊM / SỬA GIẢNG VIÊN (GIAO DIỆN HEAD) --- */}

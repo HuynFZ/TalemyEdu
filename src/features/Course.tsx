@@ -97,7 +97,7 @@ const Course = () => {
         <div className="p-4 md:p-8 bg-slate-50 min-h-screen relative font-sans">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight italic">QUẢN LÝ KHÓA HỌC (LMS)</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Quản lý khóa học (LMS)</h2>
                     <p className="text-slate-500 text-sm font-medium italic">Điều phối giảng viên và danh mục đào tạo.</p>
                 </div>
                 {user?.role === 'admin' && (

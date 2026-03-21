@@ -205,7 +205,7 @@ const ContractManagement = () => {
             <div className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center mb-8 gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                        <FileSignature className="text-orange-500" size={32} /> Quản lý Hợp đồng
+                        <FileSignature className="text-orange-500" size={32} /> Quản lý hợp đồng
                     </h2>
                 </div>
                 
