@@ -1,21 +1,21 @@
-import 'dotenv/config'; // <-- Cú pháp chuẩn cho ES Module để đọc file .env
+import 'dotenv/config'; 
 import express from 'express';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
 
 const app = express();
 app.use(cors());
-// Tăng giới hạn dung lượng để nhận file Word Base64
 app.use(express.json({ limit: '10mb' })); 
 
-// CẤU HÌNH SMTP GMAIL
+// CẤU HÌNH GỬI MAIL CHUẨN DOANH NGHIỆP (OAUTH2)
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // dùng SSL
+    service: 'gmail',
     auth: {
-        user: process.env.EMAIL_USER, // Lấy từ file .env
-        pass: process.env.EMAIL_PASS  // Lấy từ file .env (nhớ viết liền, không có dấu cách)
+        type: 'OAuth2',
+        user: process.env.EMAIL_USER,
+        clientId: process.env.CLIENT_ID,
+        clientSecret: process.env.CLIENT_SECRET,
+        refreshToken: process.env.REFRESH_TOKEN
     }
 });
 
