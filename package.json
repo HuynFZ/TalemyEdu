@@ -21,6 +21,7 @@
     "file-saver": "^2.0.5",
     "firebase": "^12.10.0",
     "gapi-script": "^1.2.0",
+    "googleapis": "^171.4.0",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.577.0",
     "nodemailer": "^8.0.3",
