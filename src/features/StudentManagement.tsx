@@ -4,7 +4,7 @@ import {
 } from '../services/studentService';
 import {
     Search, Plus, Edit, Trash2, X, Phone, Mail,
-    GraduationCap, MapPin, CreditCard, Filter, UserCheck, Calendar
+    GraduationCap
 } from 'lucide-react';
 
 const StudentManagement = () => {
@@ -15,6 +15,7 @@ const StudentManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // Đã xóa các trường enrolled_course, total_fee, paid_amount để chuẩn hóa với Interface
     const initialForm: Omit<StudentData, 'id' | 'created_at'> = {
         student_code: '',
         full_name: '',
@@ -22,18 +23,19 @@ const StudentManagement = () => {
         email: '',
         cccd: '',
         address: '',
-        enrolled_course: '',
-        total_fee: 0,
-        paid_amount: 0,
-        status: 'CHỜ THANH TOÁN',
+        status: 'Chờ xếp lớp', 
         note: ''
     };
+    
     const [formData, setFormData] = useState<any>(initialForm);
 
     useEffect(() => {
         let channel: any;
-        subscribeToStudents(setStudents).then(res => channel = res);
-        return () => { if (channel) channel.unsubscribe(); };
+        subscribeToStudents((data) => {
+            setStudents(data);
+        });
+        // Sửa lại đoạn cleanup realtime cho chuẩn
+        return () => { if (typeof channel === 'function') channel(); };
     }, []);
 
     const handleOpenCreate = () => {
@@ -73,7 +75,7 @@ const StudentManagement = () => {
     });
 
     const getStatusStyle = (status: string) => {
-        switch (status) {
+        switch (status?.toUpperCase()) {
             case 'ĐANG HỌC': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
             case 'NỢ HỌC PHÍ': return 'bg-red-50 text-red-600 border-red-100';
             case 'CHỜ THANH TOÁN': return 'bg-orange-50 text-orange-600 border-orange-100';
@@ -117,7 +119,7 @@ const StudentManagement = () => {
                         <tr className="border-b border-slate-100">
                             <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Học viên</th>
                             <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Liên hệ</th>
-                            <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Khóa học & Học phí</th>
+                            <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Ghi chú</th>
                             <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Trạng thái</th>
                             <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Thao tác</th>
                         </tr>
@@ -143,12 +145,8 @@ const StudentManagement = () => {
                                     </div>
                                 </td>
                                 <td className="p-6">
-                                    <p className="text-xs font-black text-slate-700 mb-1.5 uppercase">{student.enrolled_course || 'Chưa xếp lớp'}</p>
-                                    <div className="flex items-center gap-2 text-[10px] font-bold">
-                                        <span className="text-emerald-500">{student.paid_amount?.toLocaleString()}đ</span>
-                                        <span className="text-slate-300">/</span>
-                                        <span className="text-slate-800">{student.total_fee?.toLocaleString()}đ</span>
-                                    </div>
+                                    {/* Thay cột Học phí bằng Ghi chú */}
+                                    <p className="text-xs font-medium text-slate-500 line-clamp-2">{student.note || '---'}</p>
                                 </td>
                                 <td className="p-6">
                                         <span className={`px-3 py-1 text-[9px] font-black rounded-lg border uppercase tracking-widest ${getStatusStyle(student.status)}`}>
@@ -172,7 +170,7 @@ const StudentManagement = () => {
                 </div>
             </div>
 
-            {/* MODAL THÊM / SỬA (FULL FIELDS) */}
+            {/* MODAL THÊM / SỬA */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
                     <div className="bg-white rounded-[3rem] w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -209,29 +207,25 @@ const StudentManagement = () => {
                             </div>
 
                             <div className="space-y-4">
-                                <h3 className="font-black text-slate-800 border-b pb-2 text-xs uppercase tracking-widest text-orange-500">Tài chính & Học tập</h3>
+                                <h3 className="font-black text-slate-800 border-b pb-2 text-xs uppercase tracking-widest text-orange-500">Thông tin bổ sung</h3>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Email cá nhân</label>
                                     <input required type="email" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Tổng phí (VNĐ)</label>
-                                        <input type="number" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-slate-800" value={formData.total_fee} onChange={e => setFormData({...formData, total_fee: Number(e.target.value)})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Đã nộp (VNĐ)</label>
-                                        <input type="number" className="w-full px-5 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl outline-none font-black text-emerald-700" value={formData.paid_amount} onChange={e => setFormData({...formData, paid_amount: Number(e.target.value)})} />
-                                    </div>
+                                
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Ghi chú thêm</label>
+                                    <input type="text" className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} placeholder="Ghi chú về học viên..." />
                                 </div>
+
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Trạng thái học viên</label>
-                                    <select className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-slate-700 cursor-pointer" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})}>
-                                        <option value="ĐANG HỌC">Đang học</option>
-                                        <option value="CHỜ THANH TOÁN">Chờ thanh toán</option>
-                                        <option value="NỢ HỌC PHÍ">Nợ học phí</option>
-                                        <option value="BẢO LƯU">Bảo lưu</option>
-                                        <option value="ĐÃ TỐT NGHIỆP">Đã tốt nghiệp</option>
+                                    <select className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-slate-700 cursor-pointer" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as string})}>
+                                        <option value="Chờ xếp lớp">Chờ xếp lớp</option>
+                                        <option value="Đang học">Đang học</option>
+                                        <option value="Bảo lưu">Bảo lưu</option>
+                                        <option value="Đã tốt nghiệp">Đã tốt nghiệp</option>
+                                        <option value="Nợ học phí">Nợ học phí</option>
                                     </select>
                                 </div>
                             </div>

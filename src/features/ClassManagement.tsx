@@ -27,9 +27,8 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Form nạp đầy đủ các trường cũ
     const [newClass, setNewClass] = useState({
-        class_name: '',
+        name: '',
         teacher_id: '',
         teacher_name: '',
         student_id: '',
@@ -39,42 +38,73 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         status: 'Đang mở'
     });
 
+    // --- Hàm định dạng dữ liệu Lớp (Gắn tên GV và HV) ---
+    const formatClassData = (cls: any) => {
+        // Rút trích danh sách học viên từ các contracts
+        const enrolledStudents = cls.contracts 
+            ? cls.contracts.map((c: any) => c.student?.full_name).filter(Boolean)
+            : [];
+
+        return {
+            ...cls,
+            teacher_name: cls.teacher?.name || 'Chưa phân công',
+            student_name: enrolledStudents.length > 0 ? enrolledStudents.join(', ') : 'Chưa có học viên'
+        };
+    };
+
     // --- 2. EFFECTS (DATA FETCHING) ---
     useEffect(() => {
         const fetchInitialData = async () => {
-            // Lấy thời lượng khóa học để làm mặc định cho số buổi của lớp
+            // Lấy thời lượng khóa học
             const { data: courseData } = await supabase.from('courses').select('duration').eq('id', courseId).single();
             if (courseData) setCourseDuration(courseData.duration);
 
+            // Câu truy vấn chung để JOIN với staffs và contracts -> students
+            const querySelect = `
+                *,
+                teacher:staffs!classes_teacher_id_fkey(name),
+                contracts(
+                    student:students(full_name)
+                )
+            `;
+
             if (isDirectClass) {
-                const { data } = await supabase.from('classes').select('*').eq('id', courseId).single();
-                if (data) setSelectedClass(data);
+                const { data, error } = await supabase.from('classes').select(querySelect).eq('id', courseId).single();
+                if (error) console.error("Lỗi lấy lớp học:", error);
+                if (data) setSelectedClass(formatClassData(data));
             } else {
                 // Lấy danh sách lớp
-                const { data: classData } = await supabase.from('classes').select('*').eq('course_id', courseId).order('created_at', {ascending: false});
-                if (classData) setClasses(classData);
+                const { data: classData, error: classErr } = await supabase.from('classes').select(querySelect).eq('course_id', courseId).order('created_at', {ascending: false});
+                if (classErr) console.error("Lỗi lấy danh sách lớp:", classErr);
+                if (classData) setClasses(classData.map(formatClassData));
 
                 // Lấy danh sách GV
                 const { data: staffData } = await supabase.from('staffs').select('id, name').eq('role', 'teacher');
                 if (staffData) setTeachers(staffData);
 
-                // Lấy danh sách HV đã nhập học
+                // Lấy danh sách HV đang học
                 const { data: studentData } = await supabase.from('students').select('id, full_name').eq('status', 'ĐANG HỌC');
                 if (studentData) setStudents(studentData);
             }
         };
         fetchInitialData();
 
-        // Lắng nghe thay đổi lớp học Real-time
-        const channel = supabase.channel('classes_realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, fetchInitialData).subscribe();
-        return () => { channel.unsubscribe(); };
+        // Lắng nghe thay đổi của cả bảng classes và contracts
+        const channelClasses = supabase.channel('classes_realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, fetchInitialData).subscribe();
+        const channelContracts = supabase.channel('contracts_realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'contracts' }, fetchInitialData).subscribe();
+        
+        return () => { 
+            channelClasses.unsubscribe(); 
+            channelContracts.unsubscribe(); 
+        };
     }, [courseId, isDirectClass]);
 
-    // Lấy danh sách buổi học của lớp được chọn
+    // Lấy danh sách buổi học
     useEffect(() => {
         if (selectedClass?.id) {
             const fetchSessions = async () => {
-                const { data } = await supabase.from('sessions').select('*').eq('class_id', selectedClass.id).order('date', { ascending: true });
+                const { data, error } = await supabase.from('sessions').select('*').eq('class_id', selectedClass.id).order('date', { ascending: true });
+                if (error) console.error("Lỗi lấy danh sách buổi học:", error);
                 if (data) setSessions(data);
             };
             fetchSessions();
@@ -87,16 +117,37 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
     const handleCreateClass = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const { error } = await supabase.from('classes').insert([{
-                ...newClass,
+            // Bước 1: CHỈ insert các cột CÓ THẬT trong bảng classes
+            const { data: newClassData, error: classError } = await supabase.from('classes').insert([{
+                name: newClass.name,
                 course_id: courseId,
-                total_sessions: courseDuration // Kế thừa số buổi từ khóa học
-            }]);
-            if (error) throw error;
+                teacher_id: newClass.teacher_id || null,
+                start_date: newClass.start_date || null,
+                zoom_link: newClass.zoom_link || null,
+                status: newClass.status
+            }]).select().single();
+            
+            if (classError) throw classError;
+
+            // Bước 2: NẾU có chọn học viên, phải tạo Hợp đồng (contracts) để kết nối HV vào lớp
+            if (newClassData && newClass.student_id) {
+                const { error: contractError } = await supabase.from('contracts').insert([{
+                    contract_code: `HD_NHANH_${Date.now().toString().slice(-6)}`,
+                    student_id: newClass.student_id,
+                    class_id: newClassData.id,
+                    total_fee: 0,
+                    status: 'ĐANG HIỆU LỰC'
+                }]);
+                if (contractError) console.error("Lỗi khi kết nối Học viên vào lớp:", contractError);
+            }
+            
             setShowCreateModal(false);
-            setNewClass({ class_name: '', teacher_id: '', teacher_name: '', student_id: '', student_name: '', start_date: '', zoom_link: '', status: 'Đang mở' });
+            setNewClass({ name: '', teacher_id: '', teacher_name: '', student_id: '', student_name: '', start_date: '', zoom_link: '', status: 'Đang mở' });
             alert("Mở lớp học thành công!");
-        } catch (e) { alert("Lỗi khi tạo lớp!"); }
+        } catch (e: any) { 
+            console.error("Chi tiết lỗi tạo lớp:", e);
+            alert("Lỗi khi tạo lớp! Vui lòng kiểm tra Console (F12)."); 
+        }
     };
 
     const handleUpdateSessionStatus = async (sid: string, status: string) => {
@@ -111,7 +162,6 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
 
     // --- 4. RENDER ---
     if (view === 'sessions' && selectedClass) {
-        // View Chi tiết buổi học (Điểm danh)
         return (
             <div className="p-4 md:p-8 bg-slate-50 min-h-screen animate-in slide-in-from-right">
                 <div className="flex items-center gap-4 mb-8">
@@ -119,9 +169,9 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                         <ArrowLeft size={20}/>
                     </button>
                     <div>
-                        <h2 className="text-2xl font-black text-slate-800 uppercase italic leading-tight">{selectedClass.class_name}</h2>
+                        <h2 className="text-2xl font-black text-slate-800 uppercase italic leading-tight">{selectedClass.name}</h2>
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 italic">
-                            Tiến độ: <span className="text-orange-600">{sessions.filter(s => s.status !== 'Chưa diễn ra').length}/{selectedClass.total_sessions || courseDuration}</span> buổi
+                            Tiến độ: <span className="text-orange-600">{sessions.filter(s => s.status !== 'Chưa diễn ra').length}/{courseDuration}</span> buổi
                         </p>
                     </div>
                 </div>
@@ -131,12 +181,12 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                     <div className="space-y-6">
                         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-6">
                             <div className="flex items-center gap-4 border-b pb-6 border-slate-50">
-                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-blue-100 uppercase">{selectedClass.student_name?.charAt(0)}</div>
-                                <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Học viên</p><p className="font-black text-slate-800 text-lg">{selectedClass.student_name}</p></div>
+                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-blue-100 uppercase">{selectedClass.student_name?.charAt(0) || '?'}</div>
+                                <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Học viên</p><p className="font-black text-slate-800 text-lg line-clamp-2">{selectedClass.student_name}</p></div>
                             </div>
                             <div className="space-y-4">
                                 <div className="flex items-center gap-4"><div className="w-10 h-10 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center"><UserCheck size={20}/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">Giảng viên</p><p className="font-bold text-slate-700 text-sm">{selectedClass.teacher_name}</p></div></div>
-                                <a href={selectedClass.zoom_link} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-500 hover:text-white transition-all group border border-blue-100"><div className="flex items-center gap-3"><Video size={18}/><div><p className="text-[9px] font-black uppercase opacity-60">Phòng Zoom</p><p className="font-bold text-sm">Vào lớp học</p></div></div><ExternalLink size={16}/></a>
+                                <a href={selectedClass.zoom_link || '#'} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-500 hover:text-white transition-all group border border-blue-100"><div className="flex items-center gap-3"><Video size={18}/><div><p className="text-[9px] font-black uppercase opacity-60">Phòng Zoom</p><p className="font-bold text-sm">Vào lớp học</p></div></div><ExternalLink size={16}/></a>
                                 <button onClick={() => copyBookingLink(selectedClass.id)} className="w-full flex items-center justify-between p-4 bg-orange-50 text-orange-600 rounded-2xl hover:bg-orange-500 hover:text-white transition-all group border border-orange-100"><div className="flex items-center gap-3"><LinkIcon size={18}/><div><p className="text-[9px] font-black uppercase opacity-60">Lịch chọn</p><p className="font-bold text-sm">Gửi link cho HV</p></div></div><Copy size={16}/></button>
                             </div>
                         </div>
@@ -191,7 +241,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                     <button onClick={onBack} className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 hover:bg-orange-50 transition-all text-orange-600"><ArrowLeft size={20}/></button>
                     <h2 className="text-2xl font-black text-slate-800 uppercase italic tracking-tight">Lớp 1-1: {courseTitle}</h2>
                 </div>
-                <button onClick={() => setShowCreateModal(true)} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black shadow-lg hover:bg-orange-600 transition-all flex items-center gap-2 active:scale-95">+ Mở lớp học mới</button>
+                <button onClick={() => setShowCreateModal(true)} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black shadow-lg hover:bg-orange-600 transition-all flex items-center gap-2 active:scale-95"><Plus size={20} /> Mở lớp học mới</button>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
@@ -204,7 +254,7 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                         ) : (
                             classes.map((cls) => (
                                 <tr key={cls.id} className="hover:bg-slate-50/50 group transition-colors">
-                                    <td className="p-6"><p className="font-black text-slate-800 uppercase text-sm leading-tight">{cls.class_name}</p><p className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-1 uppercase italic tracking-tighter"><CalendarIcon size={12}/> {cls.start_date || 'Chờ định ngày'}</p></td>
+                                    <td className="p-6"><p className="font-black text-slate-800 uppercase text-sm leading-tight">{cls.name}</p><p className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-1 uppercase italic tracking-tighter"><CalendarIcon size={12}/> {cls.start_date || 'Chờ định ngày'}</p></td>
                                     <td className="p-6 font-bold text-slate-700">{cls.student_name}</td>
                                     <td className="p-6 font-black text-xs text-orange-600 uppercase italic">{cls.teacher_name}</td>
                                     <td className="p-6 text-center">
@@ -222,13 +272,13 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                 </div>
             </div>
 
-            {/* MODAL MỞ LỚP HỌC (ĐẦY ĐỦ TRƯỜNG CŨ) */}
+            {/* MODAL MỞ LỚP HỌC */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[60] p-4">
                     <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
                         <div className="p-8 bg-orange-500 text-white flex justify-between items-center shadow-lg"><h3 className="text-2xl font-black italic uppercase tracking-tighter">Khởi tạo lớp học 1-1</h3><button onClick={() => setShowCreateModal(false)} className="hover:rotate-90 transition-all p-2 bg-white/10 rounded-2xl"><X size={28} /></button></div>
                         <form onSubmit={handleCreateClass} className="p-10 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
-                            <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Tên lớp học *</label><input required className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700 focus:border-orange-500/20 transition-all" value={newClass.class_name} onChange={e => setNewClass({...newClass, class_name: e.target.value})} placeholder="VD: IELTS-K01-TEN" /></div>
+                            <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Tên lớp học *</label><input required className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-slate-700 focus:border-orange-500/20 transition-all" value={newClass.name} onChange={e => setNewClass({...newClass, name: e.target.value})} placeholder="VD: IELTS-K01-TEN" /></div>
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Học viên *</label>

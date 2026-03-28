@@ -1,19 +1,17 @@
+// --- FILE: src/services/studentService.ts ---
 import { supabase } from '../supabaseClient';
 
+// Đã chuẩn hóa: Loại bỏ các trường học phí, lớp học để nhường cho bảng contracts
 export interface StudentData {
     id?: string;
-    student_code: string;
-    full_name: string;
+    student_code: string;   
+    lead_id?: string | null; // Liên kết xem HV này đến từ Lead nào
+    full_name: string;      
     phone: string;
     email: string;
     cccd: string;
     address: string;
-    enrolled_course?: string;
-    class_id?: string;
-    class_name?: string;
-    total_fee: number;
-    paid_amount: number;
-    status: 'CHỜ THANH TOÁN' | 'NỢ HỌC PHÍ' | 'ĐANG HỌC' | 'BẢO LƯU' | 'ĐÃ TỐT NGHIỆP';
+    status: string; // 'Đang học', 'Bảo lưu', 'Đã tốt nghiệp', 'Nợ học phí'
     note?: string;
     created_at?: string;
 }
@@ -21,31 +19,35 @@ export interface StudentData {
 const TABLE_NAME = "students";
 
 // 1. Lắng nghe danh sách học viên Real-time
-export const subscribeToStudents = async (callback: (students: StudentData[]) => void) => {
-    // Lấy dữ liệu ban đầu
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .order('created_at', { ascending: false });
+export const subscribeToStudents = (callback: (students: StudentData[]) => void) => {
+    const fetchStudents = async () => {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .order('created_at', { ascending: false });
 
-    if (!error && data) {
-        callback(data as StudentData[]);
-    }
+        if (!error && data) {
+            callback(data as StudentData[]);
+        } else {
+            console.error("Lỗi tải học viên:", error);
+        }
+    };
 
-    // Thiết lập kênh Real-time
-    return supabase
-        .channel('public:students')
-        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, async () => {
-            const { data: updatedData } = await supabase
-                .from(TABLE_NAME)
-                .select('*')
-                .order('created_at', { ascending: false });
-            if (updatedData) callback(updatedData as StudentData[]);
+    fetchStudents();
+
+    const channel = supabase
+        .channel('public_students_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
+            fetchStudents();
         })
         .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
 };
 
-// 2. Tạo học viên mới
+// 2. Thêm học viên mới
 export const createStudent = async (data: Omit<StudentData, 'id' | 'created_at'>) => {
     try {
         const { data: insertedData, error } = await supabase
@@ -105,6 +107,7 @@ export const getStudentById = async (id: string) => {
         if (error) throw error;
         return data as StudentData;
     } catch (error) {
+        console.error("Lỗi khi lấy thông tin học viên:", error);
         return null;
     }
 };
