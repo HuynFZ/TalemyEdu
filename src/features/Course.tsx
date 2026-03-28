@@ -10,6 +10,17 @@ import ClassManagement from './ClassManagement';
 import { supabase } from '../supabaseClient';
 import { subscribeToCourses, createCourse, CourseData } from '../services/courseService';
 
+// ĐƯA INFOBADGE LÊN TRÊN ĐỂ TRÁNH LỖI "USED BEFORE DECLARATION"
+const InfoBadge = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: React.ReactNode }) => (
+    <div className="flex items-center gap-3">
+        <div className="text-orange-500 bg-orange-50 p-2 rounded-xl shrink-0 border border-orange-100/50">{icon}</div>
+        <div className="overflow-hidden">
+            <p className="text-slate-400 text-[9px] font-black uppercase tracking-tighter mb-1">{label}</p>
+            <p className="text-slate-700 text-xs font-black truncate">{value}</p>
+        </div>
+    </div>
+);
+
 const Course = () => {
     const { user } = useAuth();
     const [courses, setCourses] = useState<CourseData[]>([]);
@@ -265,15 +276,5 @@ const Course = () => {
         </div>
     );
 };
-
-const InfoBadge = ({ icon, label, value }: { icon: any, label: string, value: any }) => (
-    <div className="flex items-center gap-3">
-        <div className="text-orange-500 bg-orange-50 p-2 rounded-xl shrink-0 border border-orange-100/50">{icon}</div>
-        <div className="overflow-hidden">
-            <p className="text-slate-400 text-[9px] font-black uppercase tracking-tighter mb-1">{label}</p>
-            <p className="text-slate-700 text-xs font-black truncate">{value}</p>
-        </div>
-    </div>
-);
 
 export default Course;

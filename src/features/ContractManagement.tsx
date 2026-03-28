@@ -1,3 +1,4 @@
+// --- FILE: src/pages/ContractManagement.tsx ---
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, FileText, Eye, Download, Trash2, CheckCircle, Clock, XCircle, FileSignature, X, Send, User, BookOpen, CreditCard, Calendar } from 'lucide-react'; 
 import { subscribeToContracts, ContractData, updateContractStatus, deleteContract } from '../services/contractService';
@@ -31,25 +32,25 @@ const ContractManagement = () => {
 
     // --- LOGIC LỌC DỮ LIỆU ĐA LỚP ---
     const filteredContracts = contracts.filter(contract => {
-        // 1. Lọc theo thanh tìm kiếm (Tên học viên hoặc Mã HĐ)
-        const matchesSearch = contract.studentName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                              contract.contractCode?.toLowerCase().includes(searchTerm.toLowerCase());
+        const searchLower = searchTerm.toLowerCase();
+        const studentName = contract.student_name || '';
+        const contractCode = contract.contract_code || '';
         
-        // 2. Lọc theo trạng thái
-        const matchesStatus = statusFilter === 'All' || contract.contractStatus === statusFilter;
+        const matchesSearch = studentName.toLowerCase().includes(searchLower) || 
+                              contractCode.toLowerCase().includes(searchLower);
         
-        // 3. Lọc theo ngày tạo (Từ ngày -> Đến ngày)
+        const matchesStatus = statusFilter === 'All' || contract.status === statusFilter;
+        
+        // Lọc theo ngày tạo (Từ ngày -> Đến ngày)
         let matchesDate = true;
         if (startDate || endDate) {
-            // Lấy trường ngày tạo (Giả sử bạn dùng createdAt hoặc timestamp)
-            const contractTimestamp = contract.createdAt || contract.timestamp; 
+            const contractTimestamp = contract.created_at; 
             
             if (!contractTimestamp) {
-                matchesDate = false; // Nếu hợp đồng không có ngày tạo thì ẩn đi khi đang bật bộ lọc ngày
+                matchesDate = false; 
             } else {
-                // Chuyển đổi Firebase Timestamp thành JS Date
-                const contractDate = contractTimestamp.toDate ? contractTimestamp.toDate() : new Date(contractTimestamp);
-                contractDate.setHours(0, 0, 0, 0); // Đưa về 0h để so sánh chính xác theo ngày
+                const contractDate = new Date(contractTimestamp);
+                contractDate.setHours(0, 0, 0, 0); 
 
                 if (startDate) {
                     const start = new Date(startDate);
@@ -102,15 +103,18 @@ const ContractManagement = () => {
                 const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
                 const today = new Date();
-                let firstPaymentText = contract.paymentMethod === '1_LẦN' ? (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ' : (contract.firstInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
-                let secondPaymentText = contract.paymentMethod === '1_LẦN' ? 'Không' : (contract.secondInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
-                let deadlineText = contract.paymentMethod === '1_LẦN' ? 'Không' : (contract.secondDeadline || '...................');
+                let firstPaymentText = contract.payment_method === '1_LAN' ? (contract.total_fee || 0).toLocaleString('vi-VN') + ' VNĐ' : (contract.first_installment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                let secondPaymentText = contract.payment_method === '1_LAN' ? 'Không' : (contract.second_installment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                let deadlineText = contract.payment_method === '1_LAN' ? 'Không' : (contract.second_deadline || '...................');
+
+                // Dùng type any tạm thời cho các biến không có trong DB nhưng cần để in Word
+                const c = contract as any; 
 
                 doc.render({
                     day: today.getDate().toString().padStart(2, '0'), month: (today.getMonth() + 1).toString().padStart(2, '0'), year: today.getFullYear(),
-                    studentName: contract.studentName || '...', studentCCCD: contract.studentCCCD || '...', studentPhone: contract.studentPhone || '...', studentAddress: contract.studentAddress || '...',
-                    teacherName: contract.teacherName || '...', teacherCCCD: contract.teacherCCCD || '...', teacherPhone: contract.teacherPhone || '...', teacherAddress: contract.teacherAddress || '...',
-                    courseName: contract.courseName || '...', totalSessions: contract.totalSessions || contract.courseDuration || '...', sessionsPerWeek: contract.sessionsPerWeek || '...', totalFee: (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ',
+                    studentName: contract.student_name || '...', studentCCCD: contract.student_cccd || '...', studentPhone: contract.student_phone || '...', studentAddress: c.studentAddress || '...',
+                    teacherName: contract.teacher_name || '...', teacherCCCD: c.teacherCCCD || '...', teacherPhone: c.teacherPhone || '...', teacherAddress: c.teacherAddress || '...',
+                    courseName: contract.course_name || '...', totalSessions: c.totalSessions || c.courseDuration || '...', sessionsPerWeek: c.sessionsPerWeek || '...', totalFee: (contract.total_fee || 0).toLocaleString('vi-VN') + ' VNĐ',
                     firstPayment: firstPaymentText, secondPayment: secondPaymentText, deadlineSession: deadlineText
                 });
 
@@ -118,7 +122,7 @@ const ContractManagement = () => {
                     type: "blob",
                     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 });
-                saveAs(out, `HopDong_${contract.studentName}_${contract.contractCode}.docx`);
+                saveAs(out, `HopDong_${contract.student_name}_${contract.contract_code}.docx`);
             };
             reader.readAsArrayBuffer(blob);
         } catch (error) {
@@ -132,8 +136,8 @@ const ContractManagement = () => {
         setSendingId(contract.id!); 
         let studentEmail = "";
         try {
-            if (contract.studentId) {
-                const studentData = await getStudentById(contract.studentId);
+            if (contract.student_id) {
+                const studentData = await getStudentById(contract.student_id);
                 if (studentData && studentData.email) studentEmail = studentData.email;
             }
         } catch (error) {
@@ -141,7 +145,7 @@ const ContractManagement = () => {
         }
 
         if (!studentEmail) {
-            const manualEmail = prompt(`Không tìm thấy email của ${contract.studentName}. Vui lòng nhập thủ công:`, "");
+            const manualEmail = prompt(`Không tìm thấy email của ${contract.student_name}. Vui lòng nhập thủ công:`, "");
             if (!manualEmail) { setSendingId(null); return; }
             studentEmail = manualEmail;
         }
@@ -158,15 +162,16 @@ const ContractManagement = () => {
                     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
 
                     const today = new Date();
-                    let firstPaymentText = contract.paymentMethod === '1_LẦN' ? (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ' : (contract.firstInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
-                    let secondPaymentText = contract.paymentMethod === '1_LẦN' ? 'Không' : (contract.secondInstallment || 0).toLocaleString('vi-VN') + ' VNĐ';
-                    let deadlineText = contract.paymentMethod === '1_LẦN' ? 'Không' : (contract.secondDeadline || '...');
+                    let firstPaymentText = contract.payment_method === '1_LAN' ? (contract.total_fee || 0).toLocaleString('vi-VN') + ' VNĐ' : (contract.first_installment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                    let secondPaymentText = contract.payment_method === '1_LAN' ? 'Không' : (contract.second_installment || 0).toLocaleString('vi-VN') + ' VNĐ';
+                    let deadlineText = contract.payment_method === '1_LAN' ? 'Không' : (contract.second_deadline || '...');
+                    const c = contract as any;
 
                     doc.render({
                         day: today.getDate().toString().padStart(2, '0'), month: (today.getMonth() + 1).toString().padStart(2, '0'), year: today.getFullYear(),
-                        studentName: contract.studentName || '...', studentCCCD: contract.studentCCCD || '...', studentPhone: contract.studentPhone || '...', studentAddress: contract.studentAddress || '...',
-                        teacherName: contract.teacherName || '...', teacherCCCD: contract.teacherCCCD || '...', teacherPhone: contract.teacherPhone || '...', teacherAddress: contract.teacherAddress || '...',
-                        courseName: contract.courseName || '...', totalSessions: contract.totalSessions || contract.courseDuration || '...', sessionsPerWeek: contract.sessionsPerWeek || '...', totalFee: (contract.totalFee || 0).toLocaleString('vi-VN') + ' VNĐ',
+                        studentName: contract.student_name || '...', studentCCCD: contract.student_cccd || '...', studentPhone: contract.student_phone || '...', studentAddress: c.studentAddress || '...',
+                        teacherName: contract.teacher_name || '...', teacherCCCD: c.teacherCCCD || '...', teacherPhone: c.teacherPhone || '...', teacherAddress: c.teacherAddress || '...',
+                        courseName: contract.course_name || '...', totalSessions: c.totalSessions || c.courseDuration || '...', sessionsPerWeek: c.sessionsPerWeek || '...', totalFee: (contract.total_fee || 0).toLocaleString('vi-VN') + ' VNĐ',
                         firstPayment: firstPaymentText, secondPayment: secondPaymentText, deadlineSession: deadlineText
                     });
 
@@ -180,8 +185,8 @@ const ContractManagement = () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 studentEmail,
-                                studentName: contract.studentName,
-                                contractCode: contract.contractCode,
+                                studentName: contract.student_name,
+                                contractCode: contract.contract_code,
                                 fileBase64: base64data
                             })
                         });
@@ -196,10 +201,9 @@ const ContractManagement = () => {
         } catch (error) { alert("Lỗi hệ thống"); setSendingId(null); }
     };
 
-    // Hàm format hiển thị ngày trên bảng
-    const displayDate = (timestamp: any) => {
-        if (!timestamp) return '--/--/----';
-        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const displayDate = (dateString: string | undefined) => {
+        if (!dateString) return '--/--/----';
+        const date = new Date(dateString);
         return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
     };
 
@@ -216,7 +220,7 @@ const ContractManagement = () => {
                 
                 <div className="flex flex-col lg:flex-row gap-3 w-full 2xl:w-auto items-stretch lg:items-center">
                     
-                    {/* 1. Thanh tìm kiếm */}
+                    {/* Thanh tìm kiếm */}
                     <div className="relative flex-1 lg:w-64">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input 
@@ -228,7 +232,7 @@ const ContractManagement = () => {
                         />
                     </div>
                     
-                    {/* 2. Bộ lọc Ngày (Từ ngày - Đến ngày) */}
+                    {/* Bộ lọc Ngày */}
                     <div className="flex items-center bg-white rounded-xl border border-slate-200 shadow-sm px-3 py-1 gap-2">
                         <Calendar size={16} className="text-slate-400 shrink-0" />
                         <div className="flex items-center gap-1.5">
@@ -248,7 +252,6 @@ const ContractManagement = () => {
                                 title="Đến ngày"
                             />
                         </div>
-                        {/* Nút xóa bộ lọc ngày nhanh */}
                         {(startDate || endDate) && (
                             <button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-red-500 transition-colors">
                                 <X size={14} />
@@ -256,7 +259,7 @@ const ContractManagement = () => {
                         )}
                     </div>
 
-                    {/* 3. Bộ lọc Trạng thái */}
+                    {/* Bộ lọc Trạng thái */}
                     <div className="relative w-full lg:w-48 shrink-0">
                         <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <select 
@@ -299,30 +302,29 @@ const ContractManagement = () => {
                                     <div className="flex flex-col items-center justify-center opacity-50">
                                         <FileText size={48} className="text-slate-400 mb-3" />
                                         <p className="text-slate-500 font-bold text-lg">Không tìm thấy hợp đồng nào</p>
-                                        <p className="text-slate-400 text-sm mt-1">Hãy thử thay đổi điều kiện lọc hoặc tìm kiếm nhé!</p>
                                     </div>
                                 </td></tr>
                             ) : (
                                 filteredContracts.map(contract => (
                                     <tr key={contract.id} className="hover:bg-slate-50/50 group transition-colors">
-                                        <td className="p-5 font-bold text-slate-700">{contract.contractCode}</td>
+                                        <td className="p-5 font-bold text-slate-700">{contract.contract_code}</td>
                                         <td className="p-5 min-w-[150px]">
-                                            <p className="font-bold text-slate-800">{contract.studentName}</p>
-                                            <p className="text-xs text-slate-500">{contract.studentPhone}</p>
+                                            <p className="font-bold text-slate-800">{contract.student_name}</p>
+                                            <p className="text-xs text-slate-500">{contract.student_phone}</p>
                                         </td>
                                         <td className="p-5 font-bold text-slate-700 text-sm">
-                                            <p>{contract.courseName}</p>
-                                            <p className="text-xs text-orange-600 font-black mt-1">{(contract.totalFee || 0).toLocaleString('vi-VN')} đ</p>
+                                            <p>{contract.course_name}</p>
+                                            <p className="text-xs text-orange-600 font-black mt-1">{(contract.total_fee || 0).toLocaleString('vi-VN')} đ</p>
                                         </td>
                                         <td className="p-5 font-bold text-slate-500 text-sm whitespace-nowrap">
-                                            {displayDate(contract.createdAt || contract.timestamp)}
+                                            {displayDate(contract.created_at)}
                                         </td>
                                         <td className="p-5 whitespace-nowrap">
                                             <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase border ${
-                                                contract.contractStatus === 'NHÁP' ? 'bg-slate-100 text-slate-600 border-slate-200' :
-                                                contract.contractStatus === 'ĐANG HIỆU LỰC' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+                                                contract.status === 'NHÁP' ? 'bg-slate-100 text-slate-600 border-slate-200' :
+                                                contract.status === 'ĐÃ DUYỆT' || contract.status === 'ĐANG HIỆU LỰC' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
                                             }`}>
-                                                {contract.contractStatus}
+                                                {contract.status}
                                             </span>
                                         </td>
                                         
@@ -348,7 +350,7 @@ const ContractManagement = () => {
                                                 <button onClick={() => handleExportWord(contract)} className="p-2 bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white rounded-xl transition-all tooltip" title="Tải Word">
                                                     <Download size={16} />
                                                 </button>
-                                                {contract.contractStatus === 'NHÁP' && (
+                                                {(contract.status === 'NHÁP' || contract.status === 'CHỜ DUYỆT') && (
                                                     <button onClick={() => handleStatusChange(contract.id!, 'ĐANG HIỆU LỰC')} className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-xl transition-all tooltip" title="Duyệt hiệu lực">
                                                         <CheckCircle size={16} />
                                                     </button>
@@ -366,13 +368,13 @@ const ContractManagement = () => {
                 </div>
             </div>
 
-            {/* MODAL XEM CHI TIẾT HỢP ĐỒNG (GIỮ NGUYÊN CODE BÊN TRONG CỦA BẠN) */}
+            {/* MODAL XEM CHI TIẾT HỢP ĐỒNG */}
             {isViewModalOpen && selectedContract && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col">
                         <div className="p-6 bg-blue-500 flex items-center justify-between text-white">
                             <h2 className="text-xl font-black flex items-center gap-2">
-                                <FileSignature size={24} /> Chi Tiết Hợp Đồng: {selectedContract.contractCode}
+                                <FileSignature size={24} /> Chi Tiết Hợp Đồng: {selectedContract.contract_code}
                             </h2>
                             <button onClick={() => setIsViewModalOpen(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
                                 <X size={20} />
@@ -384,10 +386,10 @@ const ContractManagement = () => {
                             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16}/> Thông Tin Học Viên</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><p className="text-xs text-slate-500 mb-1">Họ và tên</p><p className="font-bold text-slate-800">{selectedContract.studentName}</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Số điện thoại</p><p className="font-bold text-slate-800">{selectedContract.studentPhone}</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">CCCD/CMND</p><p className="font-bold text-slate-800">{selectedContract.studentCCCD || 'Chưa cập nhật'}</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Địa chỉ</p><p className="font-bold text-slate-800">{selectedContract.studentAddress || 'Chưa cập nhật'}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Họ và tên</p><p className="font-bold text-slate-800">{selectedContract.student_name}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Số điện thoại</p><p className="font-bold text-slate-800">{selectedContract.student_phone}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">CCCD/CMND</p><p className="font-bold text-slate-800">{selectedContract.student_cccd || 'Chưa cập nhật'}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Địa chỉ</p><p className="font-bold text-slate-800">{(selectedContract as any).studentAddress || 'Chưa cập nhật'}</p></div>
                                 </div>
                             </div>
 
@@ -395,8 +397,8 @@ const ContractManagement = () => {
                             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><User size={16}/> Thông Tin Giáo Viên</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><p className="text-xs text-slate-500 mb-1">Họ và tên</p><p className="font-bold text-slate-800">{selectedContract.teacherName}</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Số điện thoại</p><p className="font-bold text-slate-800">{selectedContract.teacherPhone}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Họ và tên</p><p className="font-bold text-slate-800">{selectedContract.teacher_name}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Số điện thoại</p><p className="font-bold text-slate-800">{(selectedContract as any).teacherPhone || 'Chưa cập nhật'}</p></div>
                                 </div>
                             </div>
 
@@ -404,18 +406,18 @@ const ContractManagement = () => {
                             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><BookOpen size={16}/> Khóa Học & Thanh Toán</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                    <div><p className="text-xs text-slate-500 mb-1">Tên khóa học</p><p className="font-bold text-orange-600">{selectedContract.courseName}</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Tổng thời lượng</p><p className="font-bold text-slate-800">{selectedContract.totalSessions || selectedContract.courseDuration} buổi</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Tổng học phí</p><p className="font-black text-emerald-600 text-lg">{(selectedContract.totalFee || 0).toLocaleString('vi-VN')} VNĐ</p></div>
-                                    <div><p className="text-xs text-slate-500 mb-1">Phương thức đóng</p><p className="font-bold text-slate-800">{selectedContract.paymentMethod}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Tên khóa học</p><p className="font-bold text-orange-600">{selectedContract.course_name}</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Tổng thời lượng</p><p className="font-bold text-slate-800">{(selectedContract as any).totalSessions || (selectedContract as any).courseDuration || '...'} buổi</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Tổng học phí</p><p className="font-black text-emerald-600 text-lg">{(selectedContract.total_fee || 0).toLocaleString('vi-VN')} VNĐ</p></div>
+                                    <div><p className="text-xs text-slate-500 mb-1">Phương thức đóng</p><p className="font-bold text-slate-800">{selectedContract.payment_method}</p></div>
                                 </div>
                                 
-                                {selectedContract.paymentMethod !== '1_LẦN' && (
+                                {selectedContract.payment_method !== '1_LAN' && (
                                     <div className="mt-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
                                         <h4 className="text-xs font-bold text-orange-800 mb-2 flex items-center gap-2"><CreditCard size={14}/> Chi tiết trả góp</h4>
                                         <div className="grid grid-cols-2 gap-2 text-sm font-bold text-orange-700">
-                                            <p>Đợt 1: {(selectedContract.firstInstallment || 0).toLocaleString('vi-VN')} đ</p>
-                                            <p>Đợt 2: {(selectedContract.secondInstallment || 0).toLocaleString('vi-VN')} đ <br/><span className="text-xs font-normal">(Hạn: {selectedContract.secondDeadline})</span></p>
+                                            <p>Đợt 1: {(selectedContract.first_installment || 0).toLocaleString('vi-VN')} đ</p>
+                                            <p>Đợt 2: {(selectedContract.second_installment || 0).toLocaleString('vi-VN')} đ <br/><span className="text-xs font-normal">(Hạn: {selectedContract.second_deadline || 'Chưa hẹn'})</span></p>
                                         </div>
                                     </div>
                                 )}

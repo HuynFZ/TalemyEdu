@@ -93,30 +93,29 @@ export const subscribeToContracts = (callback: (contracts: ContractData[]) => vo
 // 3. Tạo hợp đồng mới
 // Sử dụng kiểu 'any' đầu vào tạm thời để tương thích với hàm createContract cũ đang truyền thừa rất nhiều trường
 // 1. Tạo hợp đồng mới
+// 3. Tạo hợp đồng mới
 export const createContract = async (data: any) => {
     try {
-        // Hàm bảo vệ: Nếu không phải số hợp lệ -> tự động ép về 0
         const safeNumber = (val: any) => {
             const num = Number(val);
             return isNaN(num) ? 0 : num;
         };
 
         const insertData = {
-            contract_code: data.contract_code || data.contractCode || `HD${Date.now()}`,
+            contract_code: data.contract_code || data.contractCode || `HĐ${Date.now().toString().slice(-6)}`,
             student_id: data.student_id || data.studentId,
             class_id: data.class_id || data.classId,
-            teacher_id: data.teacher_id || data.teacherId || null,
-            course_name: data.course_name || data.courseName || '',
-            course_duration: safeNumber(data.course_duration || data.totalSessions),
-            total_sessions: safeNumber(data.total_sessions || data.totalSessions),
-            sessions_per_week: String(data.sessions_per_week || data.sessionsPerWeek || '2'),
             total_fee: safeNumber(data.total_fee || data.totalFee),
             paid_amount: safeNumber(data.paid_amount || data.paidAmount),
             payment_method: data.payment_method || data.paymentMethod || '1_LẦN',
             first_installment: safeNumber(data.first_installment || data.firstInstallment),
             second_installment: safeNumber(data.second_installment || data.secondInstallment),
-            second_deadline: data.second_deadline || data.secondDeadline || null,
-            contract_status: data.contract_status || data.status || 'NHÁP',
+            // Xử lý an toàn: nếu ngày hạn rỗng thì đẩy lên null
+            second_deadline: data.second_deadline || data.secondDeadline || null, 
+            
+            // LỖI Ở ĐÂY ĐÃ ĐƯỢC SỬA: Đổi contract_status thành status cho khớp với SQL
+            status: data.status || data.contract_status || 'NHÁP', 
+            
             note: data.note || ''
         };
 

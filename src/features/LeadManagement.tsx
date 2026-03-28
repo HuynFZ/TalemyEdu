@@ -20,6 +20,7 @@ import {
 import { subscribeToCourses, CourseData } from '../services/courseService';
 import { createStudent } from '../services/studentService';
 import { createContract } from '../services/contractService';
+import { createClass } from '../services/classService'; 
 import { subscribeToStaffByPosition, StaffData } from '../services/staffService';
 
 const COLUMNS = ['MỚI', 'ĐÃ LIÊN HỆ', 'HẸN TEST', 'ĐÃ NHẬP HỌC', 'TẠM DỪNG'];
@@ -51,6 +52,7 @@ const LeadManagement = () => {
     // ------------------- STATES CHO MODAL TẠO HỢP ĐỒNG 1-1 -------------------
     const [isContractModalOpen, setIsContractModalOpen] = useState(false);
     const [contractLead, setContractLead] = useState<LeadData | null>(null);
+    const [isCreatingContract, setIsCreatingContract] = useState(false); // Trạng thái loading khi lưu
     
     const [contractForm, setContractForm] = useState({
         contractCode: '',
@@ -73,14 +75,9 @@ const LeadManagement = () => {
     useEffect(() => {
         const unsubscribeLeads = subscribeToLeads(setLeads);
         const unsubscribeCourses = subscribeToCourses(setCourses);
-        // Tạm bọc try catch trong trường hợp staffService chưa update sang Supabase
-        let unsubscribeTeachers: any;
-        try {
-            unsubscribeTeachers = subscribeToStaffByPosition('teacher', setTeachers);
-        } catch (error) {
-            console.warn("staffService cần được chuyển sang Supabase");
-        }
-        
+        // Sửa 'Giáo viên' thành 'teacher' cho khớp với CSDL
+        const unsubscribeTeachers = subscribeToStaffByPosition('teacher', setTeachers); 
+
         return () => {
             if (typeof unsubscribeLeads === 'function') unsubscribeLeads();
             if (typeof unsubscribeCourses === 'function') unsubscribeCourses();
@@ -90,7 +87,6 @@ const LeadManagement = () => {
 
     const filteredLeads = leads.filter(lead => {
         const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || lead.phone.includes(searchTerm) || (lead.email && lead.email.toLowerCase().includes(searchTerm.toLowerCase()));
-        // Note: Ở form tạo mới mình lưu course_id, nên lọc theo course_id
         const matchesCourse = filterCourse === 'All' || lead.course_id === filterCourse;
         return matchesSearch && matchesCourse;
     });
@@ -100,12 +96,12 @@ const LeadManagement = () => {
         const { destination, source, draggableId } = result;
         if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) return;
 
+        // Cập nhật trạng thái ngay khi kéo
         await updateLeadStatus(draggableId, destination.droppableId);
 
         if (destination.droppableId === 'ĐÃ NHẬP HỌC') {
             const leadToEnroll = leads.find(l => l.id === draggableId);
             if (leadToEnroll) {
-                // Đã sửa: Tìm khóa học theo course_id thay vì name
                 const matchedCourse = courses.find(c => c.id === leadToEnroll.course_id);
                 const defaultFee = matchedCourse ? matchedCourse.price : 0;
                 const defaultDuration = matchedCourse ? matchedCourse.duration : 0;
@@ -182,7 +178,6 @@ const LeadManagement = () => {
         e.preventDefault(); 
         if (!newLead.course_id) return alert("Vui lòng chọn khóa học!"); 
         try { 
-            // Xử lý payload để tương thích SQL
             const payload: any = { ...newLead };
             if (!payload.course_id) delete payload.course_id;
 
@@ -209,23 +204,19 @@ const LeadManagement = () => {
         if (!scheduleLead || !testDate || !testTime) return; 
         
         try { 
-            // TÌM TÊN KHÓA HỌC THỰC TẾ ĐỂ GỬI EMAIL (Thay vì gửi ID)
             const matchedCourse = courses.find(c => c.id === scheduleLead.course_id);
             const actualCourseName = matchedCourse ? matchedCourse.name : 'Khóa học chưa xác định';
 
-            // 1. GỌI EMAILJS ĐỂ GỬI EMAIL
             await emailjs.send('service_ymxefrn', 'template_wlwvjhe', { 
                 email: scheduleLead.email, 
                 to_name: scheduleLead.name, 
-                course_name: actualCourseName, // <--- Đã sửa ở đây
+                course_name: actualCourseName,
                 test_date: testDate, 
                 test_time: testTime, 
             }, 'mdfO13Zb5XWh4IbcJ'); 
             
-            // 2. LƯU LỊCH SỬ GỬI EMAIL VÀO SUPABASE
             await sendTestSchedule(scheduleLead.id!, scheduleLead.test_remind_count || 0); 
             
-            // 3. ĐÓNG MODAL & THÔNG BÁO
             setIsScheduleModalOpen(false); 
             setScheduleLead(null); 
             setTestDate(''); 
@@ -244,70 +235,62 @@ const LeadManagement = () => {
         if (!contractForm.courseId) return alert("Vui lòng chọn Khóa học!");
         if (!contractForm.teacherId) return alert("Vui lòng chọn Giáo viên cho lớp 1 kèm 1 này!");
 
+        setIsCreatingContract(true); // Bật loading
+
         try {
             const selectedTeacher = teachers.find(t => t.id === contractForm.teacherId);
             const selectedCourse = courses.find(c => c.id === contractForm.courseId);
             
-            if (!selectedTeacher) return alert("Không tìm thấy dữ liệu giáo viên!");
-            if (!selectedCourse) return alert("Không tìm thấy dữ liệu khóa học!");
+            if (!selectedTeacher) { alert("Không tìm thấy dữ liệu giáo viên!"); setIsCreatingContract(false); return; }
+            if (!selectedCourse) { alert("Không tìm thấy dữ liệu khóa học!"); setIsCreatingContract(false); return; }
 
-            const generatedStudentCode = `HV${Math.floor(Math.random() * 10000)}`;
-            const generatedClassName = `[1-1] ${selectedCourse.name} - ${contractLead.name}`;
+            const generatedStudentCode = `HV${Math.floor(1000 + Math.random() * 9000)}`;
+            const generatedClassName = `${selectedCourse.name} - ${contractLead.name}`;
 
-            // BƯỚC 1: TẠO LỚP HỌC (CLASSES) TRÊN SUPABASE
-            const { data: newClassData, error: classError } = await supabase
-                .from('classes')
-                .insert([{
-                    course_id: selectedCourse.id,
-                    teacher_id: selectedTeacher.id,
-                    name: generatedClassName,
-                    status: 'Đang mở'
-                }])
-                .select();
-
-            if (classError) throw classError;
-            const newClassId = newClassData[0].id;
-
-            // BƯỚC 2: TẠO HỌC VIÊN (STUDENTS) CHUẨN SQL
+            // BƯỚC 1: TẠO HỌC VIÊN (STUDENTS) CHUẨN SQL
             const newStudentId = await createStudent({
                 student_code: generatedStudentCode,
-                lead_id: contractLead.id, // Lưu nguồn gốc lead
+                lead_id: contractLead.id,
                 full_name: contractLead.name,
                 phone: contractLead.phone,
                 email: contractLead.email || '',
                 cccd: contractForm.studentCCCD,
                 address: contractForm.studentAddress,
-                status: contractForm.totalFee > 0 ? 'NỢ HỌC PHÍ' : 'ĐANG HỌC',
+                status: 'ĐANG HỌC',
                 note: `Chuyển từ Lead. Lớp: ${generatedClassName}`
             });
 
-            // BƯỚC 3: TẠO HỢP ĐỒNG (CONTRACTS) CHUẨN SQL
+            // BƯỚC 2: TẠO LỚP HỌC (CLASSES) TRÊN SUPABASE
+            const newClassId = await createClass({
+                course_id: selectedCourse.id,
+                teacher_id: selectedTeacher.id,
+                name: generatedClassName,
+                status: 'Đang mở'
+            });
+
             // BƯỚC 3: TẠO HỢP ĐỒNG (CONTRACTS) CHUẨN SQL
             await createContract({
                 contract_code: contractForm.contractCode,
                 student_id: newStudentId, 
                 class_id: newClassId,
-                teacher_id: contractForm.teacherId,             // Bổ sung GV
-                course_name: contractForm.courseName,           // Bổ sung Tên khóa
-                course_duration: contractForm.totalSessions,    // Bổ sung Số buổi
-                total_sessions: contractForm.totalSessions,     // Bổ sung Tổng buổi
-                sessions_per_week: contractForm.sessionsPerWeek,// Bổ sung Lịch học
                 total_fee: contractForm.totalFee,
-                paid_amount: 0,
+                paid_amount: contractForm.firstInstallment || 0, // Mặc định đã thanh toán đợt 1
                 payment_method: contractForm.paymentMethod,
                 first_installment: contractForm.firstInstallment,
                 second_installment: contractForm.secondInstallment,
                 second_deadline: contractForm.secondDeadline || null,
-                contract_status: 'NHÁP', // Đổi status -> contract_status cho chuẩn
+                status: 'ĐÃ DUYỆT', 
                 note: contractForm.note
             });
             
-            alert("Tạo Hợp đồng & Lớp 1-1 thành công!");
+            alert("Tạo Hợp đồng, Lớp 1-1 và Học viên thành công!");
             setIsContractModalOpen(false);
             setContractLead(null);
         } catch (error) {
             console.error("Lỗi khi tạo hợp đồng:", error);
-            alert("Có lỗi khi tạo hợp đồng. Vui lòng kiểm tra console.");
+            alert("Có lỗi khi tạo hợp đồng. Vui lòng kiểm tra lại dữ liệu.");
+        } finally {
+            setIsCreatingContract(false); // Tắt loading
         }
     };
 
@@ -576,8 +559,8 @@ const LeadManagement = () => {
                                 )}
                             </div>
 
-                            <button type="submit" className="w-full bg-orange-500 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-200 hover:bg-orange-600 transition-all active:scale-[0.98] mt-4 uppercase">
-                                XÁC NHẬN LƯU & TẠO HỢP ĐỒNG
+                            <button type="submit" disabled={isCreatingContract} className="w-full bg-orange-500 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-200 hover:bg-orange-600 transition-all active:scale-[0.98] mt-4 uppercase disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isCreatingContract ? "ĐANG XỬ LÝ DỮ LIỆU..." : "XÁC NHẬN LƯU & TẠO HỢP ĐỒNG"}
                             </button>
                         </form>
                     </div>
