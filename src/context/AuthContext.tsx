@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { supabase } from '../supabaseClient'; // Import client đã tạo
 
 export type Role = 'admin' | 'finance' | 'teacher' | 'sale' | 'pt';
 
 interface User {
+    id: string;      // Thêm ID từ Supabase
     name: string;
     role: Role;
     email: string;
@@ -22,13 +22,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const INACTIVITY_LIMIT = 30 * 60 * 1000;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    // 1. Khởi tạo User từ localStorage (giúp F5 không bị văng ra ngoài)
+    // 1. Khởi tạo User từ localStorage
     const [user, setUser] = useState<User | null>(() => {
         const savedUser = localStorage.getItem('talemy_user');
         return savedUser ? JSON.parse(savedUser) : null;
     });
 
-    // 2. Hàm Logout (dùng useCallback để tránh re-render vô tận)
+    // 2. Hàm Logout
     const logout = useCallback(() => {
         localStorage.removeItem('talemy_user');
         localStorage.removeItem('last_activity');
@@ -54,20 +54,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [user, logout]);
 
-    // 5. Thiết lập các bộ lắng nghe sự kiện
+    // 5. Lắng nghe sự kiện người dùng hoạt động
     useEffect(() => {
         if (!user) return;
 
-        // Ghi nhận hoạt động ngay khi load/F5
         updateActivity();
-
-        // Danh sách các hành động được coi là "đang làm việc"
         const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-
         events.forEach(event => window.addEventListener(event, updateActivity));
 
-        // Kiểm tra mỗi phút một lần
-        const interval = setInterval(checkInactivity, 60000);
+        const interval = setInterval(checkInactivity, 60000); // Check mỗi phút
 
         return () => {
             events.forEach(event => window.removeEventListener(event, updateActivity));
@@ -75,11 +70,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [user, updateActivity, checkInactivity]);
 
-    // 6. Hàm Login nâng cấp (Đã thêm ngoại lệ Gmail Tester)
+    // 6. Hàm Login dùng Supabase
     const login = async (email: string, password?: string) => {
-        const lowerEmail = email.toLowerCase();
+        const lowerEmail = email.toLowerCase().trim();
 
-        // LOGIC NGOẠI LỆ TẠI ĐÂY
+        // Kiểm tra định dạng email
         const isTalemyEmail = lowerEmail.endsWith('@talemy.edu');
         const isTesterEmail = lowerEmail === 'nguyennhathuy083@gmail.com';
 
@@ -94,32 +89,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         try {
-            const q = query(
-                collection(db, "users"),
-                where("username", "==", lowerEmail),
-                where("status", "==", "active"),
-                limit(1)
-            );
+            // Truy vấn vào bảng users trong Supabase
+            const { data: userData, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('username', lowerEmail)
+                .eq('status', 'active')
+                .maybeSingle(); // Lấy 1 bản ghi hoặc null
 
-            const querySnapshot = await getDocs(q);
+            if (error) throw error;
 
-            if (!querySnapshot.empty) {
-                const userData = querySnapshot.docs[0].data();
-
+            if (userData) {
+                // Kiểm tra mật khẩu (So sánh trực tiếp theo logic cũ của bạn)
                 if (userData.password === password) {
-                    // Logic lấy tên hiển thị:
-                    // Email: nguyen.van.a@talemy.edu -> Name: Nguyen
-                    // Email: nguyennhathuy083@gmail.com -> Name: Nguyennhathuy083
                     const namePart = lowerEmail.split('@')[0];
                     const firstName = namePart.includes('.') ? namePart.split('.')[0] : namePart;
 
                     const newUser: User = {
+                        id: userData.id,
                         name: firstName.charAt(0).toUpperCase() + firstName.slice(1),
                         role: userData.role as Role,
                         email: lowerEmail
                     };
 
-                    // Lưu vào State và LocalStorage cùng lúc
                     setUser(newUser);
                     localStorage.setItem('talemy_user', JSON.stringify(newUser));
                     localStorage.setItem('last_activity', Date.now().toString());
@@ -131,7 +123,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (error) {
             console.error("Auth Error:", error);
-            alert("🔌 Lỗi kết nối Database!");
+            alert("🔌 Lỗi kết nối hệ thống Supabase!");
         }
     };
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStaffProfile } from '../services/staffService';
-import { db } from '../firebase';
 import {
     doc, collection, addDoc, serverTimestamp,
     query, where, getDocs, onSnapshot, getDoc
