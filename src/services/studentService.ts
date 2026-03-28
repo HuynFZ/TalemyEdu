@@ -1,22 +1,19 @@
 // --- FILE: src/services/studentService.ts ---
 import { supabase } from '../supabaseClient';
 
+// Đã cập nhật Interface theo chuẩn SQL Normalization mới nhất
 export interface StudentData {
     id?: string;
-    student_code: string;   // Chuyển sang snake_case
-    full_name: string;      // Chuyển sang snake_case
+    student_code: string;   
+    lead_id?: string | null; // Liên kết xem HV này đến từ Lead nào
+    full_name: string;      
     phone: string;
     email: string;
     cccd: string;
     address: string;
-    enrolled_course?: string; // Khóa đang học (tương ứng với enrolledCourse)
-    class_id?: string;        // ID của lớp học
-    class_name?: string;      // Tên của lớp học
-    total_fee: number;       // Tổng học phí
-    paid_amount: number;     // Đã thanh toán
-    status: 'CHỜ THANH TOÁN' | 'NỢ HỌC PHÍ' | 'ĐANG HỌC' | 'BẢO LƯU' | 'ĐÃ TỐT NGHIỆP';
+    status: string; // 'Đang học', 'Bảo lưu', 'Đã tốt nghiệp'
     note?: string;
-    created_at?: any;
+    created_at?: string;
 }
 
 const TABLE_NAME = "students";
@@ -31,24 +28,26 @@ export const subscribeToStudents = (callback: (students: StudentData[]) => void)
 
         if (!error && data) {
             callback(data as StudentData[]);
+        } else {
+            console.error("Lỗi tải học viên:", error);
         }
     };
 
-    // Gọi lần đầu để lấy dữ liệu
     fetchStudents();
 
-    // Lắng nghe thay đổi từ Database
     const channel = supabase
-        .channel('public:students')
+        .channel('public_students_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
             fetchStudents();
         })
         .subscribe();
 
-    return channel;
+    return () => {
+        supabase.removeChannel(channel);
+    };
 };
 
-// 2. Tạo hồ sơ học viên mới
+// 2. Thêm học viên mới
 export const createStudent = async (data: Omit<StudentData, 'id' | 'created_at'>) => {
     try {
         const { data: insertedData, error } = await supabase
@@ -108,7 +107,7 @@ export const getStudentById = async (id: string) => {
         if (error) throw error;
         return data as StudentData;
     } catch (error) {
-        console.error("Lỗi lấy thông tin học viên:", error);
+        console.error("Lỗi khi lấy thông tin học viên:", error);
         return null;
     }
 };

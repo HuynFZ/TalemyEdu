@@ -1,26 +1,24 @@
 // --- FILE: src/services/leadService.ts ---
 import { supabase } from '../supabaseClient';
 
-// 1. Định nghĩa Interface khớp với bảng 'leads' trong Database Supabase
 export interface LeadData {
     id?: string;
     name: string;
     phone: string;
     email?: string;
+    course_id?: string | null;   
+    assigned_to?: string | null; 
     status: string;
-    course: string; // Tương ứng với cột course_interest hoặc tên khóa học
+    test_remind_count?: number;     
+    last_test_reminded_at?: string | null; 
     source?: string;
     note?: string;
-    created_at?: any;
-    test_remind_count?: number;     // Số lần đã gửi/nhắc lịch test
-    last_test_reminded_at?: any;    // Thời gian nhắc gần nhất
+    created_at?: string;
 }
 
 const TABLE_NAME = "leads";
 
-// 2. Hàm lấy danh sách Leads Real-time
 export const subscribeToLeads = (callback: (leads: LeadData[]) => void) => {
-    // Lấy dữ liệu ban đầu
     const fetchInitialLeads = async () => {
         const { data, error } = await supabase
             .from(TABLE_NAME)
@@ -29,35 +27,34 @@ export const subscribeToLeads = (callback: (leads: LeadData[]) => void) => {
 
         if (!error && data) {
             callback(data as LeadData[]);
+        } else {
+            console.error("Lỗi khi tải danh sách Leads:", error);
         }
     };
 
     fetchInitialLeads();
 
-    // Thiết lập kênh Realtime để lắng nghe thay đổi (INSERT, UPDATE, DELETE)
     const channel = supabase
-        .channel('public:leads')
+        .channel('public_leads_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
-            fetchInitialLeads(); // Load lại toàn bộ danh sách khi có bất kỳ thay đổi nào
+            fetchInitialLeads();
         })
         .subscribe();
 
-    return channel; // Trả về channel để có thể unsubscribe khi component unmount
+    return () => {
+        supabase.removeChannel(channel);
+    };
 };
 
-// 3. Hàm tạo Lead mới
 export const createLead = async (leadData: Omit<LeadData, 'id' | 'created_at'>) => {
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .insert([
-                {
-                    ...leadData,
-                    test_remind_count: 0,
-                    last_test_reminded_at: null,
-                    // created_at sẽ được Postgres tự động điền (DEFAULT NOW())
-                }
-            ])
+            .insert([{
+                ...leadData,
+                test_remind_count: 0,
+                last_test_reminded_at: null
+            }])
             .select();
 
         if (error) throw error;
@@ -68,7 +65,6 @@ export const createLead = async (leadData: Omit<LeadData, 'id' | 'created_at'>) 
     }
 };
 
-// 4. Hàm cập nhật trạng thái Lead (Khi kéo thả Kanban)
 export const updateLeadStatus = async (leadId: string, newStatus: string) => {
     try {
         const { error } = await supabase
@@ -83,14 +79,13 @@ export const updateLeadStatus = async (leadId: string, newStatus: string) => {
     }
 };
 
-// 5. Hàm xử lý khi bấm Gửi/Nhắc lịch Test
 export const sendTestSchedule = async (leadId: string, currentCount: number) => {
     try {
         const { error } = await supabase
             .from(TABLE_NAME)
             .update({
                 test_remind_count: (currentCount || 0) + 1,
-                last_test_reminded_at: new Date().toISOString()
+                last_test_reminded_at: new Date().toISOString() 
             })
             .eq('id', leadId);
 
@@ -101,7 +96,6 @@ export const sendTestSchedule = async (leadId: string, currentCount: number) => 
     }
 };
 
-// 6. Hàm cập nhật thông tin Lead (Dùng trong Modal Sửa)
 export const updateLead = async (id: string, updateData: Partial<LeadData>) => {
     try {
         const { error } = await supabase
@@ -116,7 +110,6 @@ export const updateLead = async (id: string, updateData: Partial<LeadData>) => {
     }
 };
 
-// 7. Hàm xóa Lead
 export const deleteLead = async (id: string) => {
     try {
         const { error } = await supabase

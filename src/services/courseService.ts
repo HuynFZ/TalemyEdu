@@ -1,7 +1,7 @@
 // --- FILE: src/services/courseService.ts ---
 import { supabase } from '../supabaseClient';
 
-// 1. Định nghĩa Interface dựa trên bảng 'courses' trong ERD
+// 1. Định nghĩa Interface chuẩn khớp với bảng 'courses' SQL hiện tại
 export interface CourseData {
     id?: string;
     name: string;
@@ -10,52 +10,39 @@ export interface CourseData {
     price: number;
     duration: number; // Số buổi học
     status: 'active' | 'inactive' | 'upcoming';
-    instructor_id?: string; // Khóa ngoại liên kết bảng staffs
-    assistant_id?: string;  // Khóa ngoại liên kết bảng staffs
     created_at?: string;
-
-    // Các trường ảo lấy từ bảng staffs qua Join (để hiển thị UI)
-    instructor_name?: string;
-    assistant_name?: string;
 }
 
 const TABLE_NAME = "courses";
 
-// 2. Hàm lấy danh sách khóa học Real-time (Kèm Join thông tin nhân sự)
+// 2. Hàm lấy danh sách khóa học Real-time
 export const subscribeToCourses = (callback: (courses: CourseData[]) => void) => {
     const fetchCourses = async () => {
-        // Join với bảng staffs dựa trên instructor_id và assistant_id
+        // Khóa học giờ chỉ chứa thông tin cơ bản, giảng viên nằm ở Classes
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select(`
-        *,
-        instructor:staffs!instructor_id(name),
-        assistant:staffs!assistant_id(name)
-      `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (!error && data) {
-            // Format lại dữ liệu để UI dễ sử dụng
-            const formattedData = data.map(course => ({
-                ...course,
-                instructor_name: course.instructor?.name,
-                assistant_name: course.assistant?.name
-            })) as CourseData[];
-
-            callback(formattedData);
+            callback(data as CourseData[]);
+        } else {
+            console.error("Lỗi tải khóa học:", error);
         }
     };
 
-    // Lấy dữ liệu lần đầu
     fetchCourses();
 
-    // Lắng nghe thay đổi Postgres
-    return supabase
-        .channel('public:courses')
+    const channel = supabase
+        .channel('public_courses_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
             fetchCourses();
         })
         .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
 };
 
 // 3. Hàm thêm khóa học mới

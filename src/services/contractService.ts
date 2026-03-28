@@ -1,42 +1,134 @@
 // --- FILE: src/services/contractService.ts ---
 import { supabase } from '../supabaseClient';
 
+// 1. Định nghĩa Interface chuẩn hóa
 export interface ContractData {
     id?: string;
-    contract_code: string; // Chuyển sang snake_case để khớp với SQL
+    contract_code: string; 
     student_id: string;
-    teacher_id: string;
-    student_name?: string;     // Lấy từ bảng students qua join
-    student_phone?: string;    // Lấy từ bảng students qua join
-    teacher_name?: string;     // Lấy từ bảng staffs qua join
-    course_name: string;
     class_id: string;
-    class_name?: string;
-    course_duration: number;
-    total_sessions: number;
-    sessions_per_week: string;
     total_fee: number;
     paid_amount: number;
-    payment_method: '1_LẦN' | '2_LẦN';
+    payment_method: string; // '1_LAN' | '2_LAN'
     first_installment: number;
     second_installment: number;
-    second_deadline: string;
-    contract_status: string;
-    note: string;
-    created_at?: any;
+    second_deadline?: string | null;
+    status: string;
+    note?: string;
+    created_at?: string;
+
+    // --- CÁC TRƯỜNG DỮ LIỆU ĐƯỢC JOIN TỪ BẢNG KHÁC (Dùng để hiển thị lên UI) ---
+    student_name?: string;
+    student_phone?: string;
+    student_cccd?: string;
+    class_name?: string;
+    course_name?: string;
+    teacher_name?: string;
 }
 
 const TABLE_NAME = "contracts";
 
-// 1. Tạo hợp đồng mới
-export const createContract = async (data: Omit<ContractData, 'id' | 'created_at'>) => {
-    try {
-        const { data: insertedData, error } = await supabase
+// 2. Lấy danh sách hợp đồng (Kèm theo JOIN dữ liệu siêu mượt của Supabase)
+export const subscribeToContracts = (callback: (contracts: ContractData[]) => void) => {
+    const fetchContracts = async () => {
+        // Cú pháp JOIN xuyên 4 bảng: Hợp đồng -> Học viên & Lớp học -> Khóa học & Giáo viên
+        const { data, error } = await supabase
             .from(TABLE_NAME)
-            .insert([data])
+            .select(`
+                *,
+                student:students ( full_name, phone, cccd ),
+                class:classes ( 
+                    name, 
+                    course:courses ( name ),
+                    teacher:staffs!teacher_id ( name )
+                )
+            `)
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            // Ép phẳng (Flatten) dữ liệu để Giao diện (UI) cũ của bạn vẫn dùng bình thường mà không cần sửa code
+            const formattedData = data.map((item: any) => ({
+                id: item.id,
+                contract_code: item.contract_code,
+                student_id: item.student_id,
+                class_id: item.class_id,
+                total_fee: item.total_fee,
+                paid_amount: item.paid_amount,
+                payment_method: item.payment_method,
+                first_installment: item.first_installment,
+                second_installment: item.second_installment,
+                second_deadline: item.second_deadline,
+                status: item.status,
+                note: item.note,
+                created_at: item.created_at,
+                // Dữ liệu được bóc tách từ lệnh JOIN:
+                student_name: item.student?.full_name || 'Không xác định',
+                student_phone: item.student?.phone || '',
+                student_cccd: item.student?.cccd || '',
+                class_name: item.class?.name || 'Không xác định',
+                course_name: item.class?.course?.name || 'Không xác định',
+                teacher_name: item.class?.teacher?.name || 'Không xác định'
+            })) as ContractData[];
+
+            callback(formattedData);
+        } else {
+            console.error("Lỗi khi tải danh sách hợp đồng:", error);
+        }
+    };
+
+    fetchContracts();
+
+    const channel = supabase
+        .channel('public_contracts_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
+            fetchContracts();
+        })
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+};
+
+// 3. Tạo hợp đồng mới
+// Sử dụng kiểu 'any' đầu vào tạm thời để tương thích với hàm createContract cũ đang truyền thừa rất nhiều trường
+// 1. Tạo hợp đồng mới
+export const createContract = async (data: any) => {
+    try {
+        // Hàm bảo vệ: Nếu không phải số hợp lệ -> tự động ép về 0
+        const safeNumber = (val: any) => {
+            const num = Number(val);
+            return isNaN(num) ? 0 : num;
+        };
+
+        const insertData = {
+            contract_code: data.contract_code || data.contractCode || `HD${Date.now()}`,
+            student_id: data.student_id || data.studentId,
+            class_id: data.class_id || data.classId,
+            teacher_id: data.teacher_id || data.teacherId || null,
+            course_name: data.course_name || data.courseName || '',
+            course_duration: safeNumber(data.course_duration || data.totalSessions),
+            total_sessions: safeNumber(data.total_sessions || data.totalSessions),
+            sessions_per_week: String(data.sessions_per_week || data.sessionsPerWeek || '2'),
+            total_fee: safeNumber(data.total_fee || data.totalFee),
+            paid_amount: safeNumber(data.paid_amount || data.paidAmount),
+            payment_method: data.payment_method || data.paymentMethod || '1_LẦN',
+            first_installment: safeNumber(data.first_installment || data.firstInstallment),
+            second_installment: safeNumber(data.second_installment || data.secondInstallment),
+            second_deadline: data.second_deadline || data.secondDeadline || null,
+            contract_status: data.contract_status || data.status || 'NHÁP',
+            note: data.note || ''
+        };
+
+        const { data: insertedData, error } = await supabase
+            .from('contracts')
+            .insert([insertData])
             .select();
 
-        if (error) throw error;
+        if (error) {
+            console.error("Lỗi chi tiết từ Supabase:", error);
+            throw error;
+        }
         return insertedData[0].id;
     } catch (error) {
         console.error("Lỗi khi tạo hợp đồng:", error);
@@ -44,59 +136,23 @@ export const createContract = async (data: Omit<ContractData, 'id' | 'created_at
     }
 };
 
-// 2. Lắng nghe danh sách hợp đồng Real-time (Kèm Join dữ liệu)
-export const subscribeToContracts = (callback: (contracts: any[]) => void) => {
-    // Hàm fetch dữ liệu kèm thông tin học viên và giáo viên
-    const fetchFullData = async () => {
-        const { data, error } = await supabase
-            .from(TABLE_NAME)
-            .select(`
-                *,
-                students (full_name, phone),
-                staffs (name)
-            `)
-            .order('created_at', { ascending: false });
-
-        if (!error && data) {
-            // Map lại dữ liệu để giữ tương thích với UI cũ (nếu UI dùng studentName thay vì students.full_name)
-            const formattedData = data.map(item => ({
-                ...item,
-                studentName: item.students?.full_name,
-                studentPhone: item.students?.phone,
-                teacherName: item.staffs?.name
-            }));
-            callback(formattedData);
-        }
-    };
-
-    // Gọi lần đầu
-    fetchFullData();
-
-    // Thiết lập Realtime
-    return supabase
-        .channel('public:contracts')
-        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
-            fetchFullData();
-        })
-        .subscribe();
-};
-
-// 3. Cập nhật trạng thái hợp đồng
-export const updateContractStatus = async (id: string, status: string) => {
+// 4. Cập nhật trạng thái hợp đồng
+export const updateContractStatus = async (id: string, newStatus: string) => {
     try {
         const { error } = await supabase
             .from(TABLE_NAME)
-            .update({ contract_status: status })
+            .update({ status: newStatus })
             .eq('id', id);
 
         if (error) throw error;
+        return true;
     } catch (error) {
         console.error("Lỗi khi cập nhật trạng thái:", error);
         throw error;
     }
 };
 
-// 4. Xóa hợp đồng
+// 5. Xóa hợp đồng
 export const deleteContract = async (id: string) => {
     try {
         const { error } = await supabase
@@ -105,6 +161,7 @@ export const deleteContract = async (id: string) => {
             .eq('id', id);
 
         if (error) throw error;
+        return true;
     } catch (error) {
         console.error("Lỗi khi xóa hợp đồng:", error);
         throw error;
