@@ -5,7 +5,6 @@ import {
     Edit, Trash2, Key, ShieldCheck, XCircle, Plus, Check, Lock
 } from 'lucide-react';
 import { createStaff, updateStaff, deleteStaff, subscribeToStaffs, StaffData } from '../services/staffService';
-import { collection, query, where, onSnapshot, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 const StaffManagement = () => {
     const [staffList, setStaffList] = useState<StaffData[]>([]);

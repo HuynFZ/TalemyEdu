@@ -10,7 +10,6 @@ import {
 import emailjs from '@emailjs/browser'; 
 
 // IMPORT FIREBASE
-import { collection, query, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import {
     subscribeToLeads, updateLeadStatus, createLead,

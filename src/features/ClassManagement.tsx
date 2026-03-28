@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-    collection, query, where, onSnapshot, addDoc, deleteDoc,
-    doc, updateDoc, orderBy, serverTimestamp, getDoc
-} from 'firebase/firestore';
-import {
     User, UserCheck, Plus, ArrowLeft, X,
     Trash2, Clock, ChevronRight, FileText, Video, Link as LinkIcon,
     ExternalLink, Copy, CheckCircle2, AlertTriangle, Info, Calendar as CalendarIcon
