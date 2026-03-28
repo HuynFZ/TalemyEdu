@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStaffProfile } from '../services/staffService';
+import { supabase } from '../supabaseClient';
 import {
     User, Mail, Phone, MapPin, Calendar, Briefcase, Shield,
-    CheckCircle2, Clock, Send, Lock, AlertCircle, Info, Key, Eye, EyeOff, Check, Fingerprint
+    CheckCircle2, Clock, Send, Lock, AlertCircle, Info, Key, Eye, EyeOff, Check
 } from 'lucide-react';
 
 const DAYS_OF_WEEK = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
@@ -39,41 +40,67 @@ const Information = () => {
     }, [user]);
 
     const fetchData = async () => {
+        setLoading(true);
         const data = await getStaffProfile(user!.email);
         if (data) {
             setProfile(data);
-            setTempSchedule(data.fixedSchedule || []);
+            setTempSchedule(data.fixed_schedule || []);
 
             // 1. Theo dõi yêu cầu đổi lịch (Teacher)
-            const qSched = query(collection(db, "scheduleRequests"), where("teacherId", "==", data.id), where("status", "==", "pending"));
-            onSnapshot(qSched, (snap) => {
-                if (!snap.empty) setPendingScheduleRequest({ id: snap.docs[0].id, ...snap.docs[0].data() });
-                else setPendingScheduleRequest(null);
-            });
+            const fetchScheduleReq = async () => {
+                const { data: sReq } = await supabase
+                    .from('schedule_requests')
+                    .select('*')
+                    .eq('teacher_id', data.id)
+                    .eq('status', 'pending')
+                    .maybeSingle();
+                setPendingScheduleRequest(sReq);
+            };
 
             // 2. Theo dõi yêu cầu đổi mật khẩu
-            const qPwd = query(collection(db, "passwordRequests"), where("userId", "==", data.user_id), where("status", "==", "pending"));
-            onSnapshot(qPwd, (snap) => {
-                if (!snap.empty) setPendingPwdRequest({ id: snap.docs[0].id, ...snap.docs[0].data() });
-                else setPendingPwdRequest(null);
-            });
+            const fetchPwdReq = async () => {
+                const { data: pReq } = await supabase
+                    .from('password_requests')
+                    .select('*')
+                    .eq('user_id', data.user_id)
+                    .eq('status', 'pending')
+                    .maybeSingle();
+                setPendingPwdRequest(pReq);
+            };
 
             // 3. Kiểm tra các thứ đang có lớp dạy (Chỉ GV mới check)
-            if (user?.role === 'teacher') {
-                const qClasses = query(collection(db, "classes"), where("teacherId", "==", data.id));
-                const classSnap = await getDocs(qClasses);
-                const daysInUse: string[] = [];
-                for (const classDoc of classSnap.docs) {
-                    const qSessions = query(collection(db, "sessions"), where("classId", "==", classDoc.id), where("status", "==", "Chưa diễn ra"));
-                    const sessionSnap = await getDocs(qSessions);
-                    sessionSnap.forEach(s => {
-                        const date = new Date(s.data().date);
+            if (data.role === 'teacher') {
+                const { data: classes } = await supabase
+                    .from('classes')
+                    .select('id')
+                    .eq('teacher_id', data.id);
+
+                if (classes && classes.length > 0) {
+                    const classIds = classes.map(c => c.id);
+                    const { data: sessions } = await supabase
+                        .from('sessions')
+                        .select('date')
+                        .in('class_id', classIds)
+                        .eq('status', 'Chưa diễn ra');
+
+                    const daysInUse: string[] = [];
+                    sessions?.forEach(s => {
+                        const date = new Date(s.date);
                         const dayName = Object.keys(DAYS_MAP).find(key => DAYS_MAP[key] === date.getDay());
                         if (dayName && !daysInUse.includes(dayName)) daysInUse.push(dayName);
                     });
+                    setActiveDays(daysInUse);
                 }
-                setActiveDays(daysInUse);
             }
+
+            await fetchScheduleReq();
+            await fetchPwdReq();
+
+            // Thiết lập Realtime lắng nghe trạng thái yêu cầu
+            supabase.channel('info-requests')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'password_requests' }, fetchPwdReq)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule_requests' }, fetchScheduleReq)
+                .subscribe();
         }
         setLoading(false);
     };
@@ -84,9 +111,13 @@ const Information = () => {
         setVerifying(true);
         setPwdError('');
         try {
-            const userRef = doc(db, "users", profile.user_id);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists() && userSnap.data().password === oldPassword) {
+            const { data: userData, error } = await supabase
+                .from('users')
+                .select('password')
+                .eq('id', profile.user_id)
+                .single();
+
+            if (userData && userData.password === oldPassword) {
                 setIsVerified(true);
             } else {
                 setPwdError('Mật khẩu cũ không chính xác!');
@@ -99,15 +130,17 @@ const Information = () => {
         if (newPassword.length < 6) return alert("Mật khẩu mới tối thiểu 6 ký tự!");
         setSubmittingPwd(true);
         try {
-            await addDoc(collection(db, "passwordRequests"), {
-                userId: profile.user_id,
-                userName: profile.name,
-                userEmail: profile.email,
-                newPassword: newPassword,
+            const { error } = await supabase.from('password_requests').insert([{
+                user_id: profile.user_id,
+                user_name: profile.name,
+                user_email: profile.email,
+                new_password: newPassword,
                 status: 'pending',
-                type: 'CHANGE_PASSWORD',
-                createdAt: serverTimestamp()
-            });
+                type: 'CHANGE_PASSWORD'
+            }]);
+
+            if (error) throw error;
+
             setNewPassword(''); setOldPassword(''); setIsVerified(false);
             alert("Đã gửi yêu cầu đổi mật khẩu tới Admin!");
         } catch (error) { alert("Lỗi gửi yêu cầu!"); }
@@ -129,14 +162,15 @@ const Information = () => {
         if (tempSchedule.length < 2) return alert("Bạn phải chọn ít nhất 2 ngày rảnh!");
         setSubmittingSchedule(true);
         try {
-            await addDoc(collection(db, "scheduleRequests"), {
-                teacherId: profile.id,
-                teacherName: profile.name,
-                oldSchedule: profile.fixedSchedule || [],
-                newSchedule: tempSchedule,
-                status: 'pending',
-                createdAt: serverTimestamp()
-            });
+            const { error } = await supabase.from('schedule_requests').insert([{
+                teacher_id: profile.id,
+                teacher_name: profile.name,
+                old_schedule: profile.fixed_schedule || [],
+                new_schedule: tempSchedule,
+                status: 'pending'
+            }]);
+
+            if (error) throw error;
             alert("Đã gửi yêu cầu thay đổi lịch tới Admin!");
         } catch (error) { alert("Lỗi hệ thống!"); }
         finally { setSubmittingSchedule(false); }
@@ -155,7 +189,7 @@ const Information = () => {
                     </div>
                     <div className="flex-1 text-center md:text-left">
                         <h2 className="text-3xl font-black text-slate-800 mb-2">{profile?.name}</h2>
-                        <span className="px-4 py-1.5 bg-orange-50 text-orange-600 font-black text-[10px] rounded-full border border-orange-100 uppercase tracking-widest">{user?.role}</span>
+                        <span className="px-4 py-1.5 bg-orange-50 text-orange-600 font-black text-[10px] rounded-full border border-orange-100 uppercase tracking-widest">{profile?.role}</span>
                     </div>
                 </div>
 
@@ -163,7 +197,7 @@ const Information = () => {
                     {/* KHỐI 1: THÔNG TIN CƠ BẢN */}
                     <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm space-y-6">
                         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><User size={18} className="text-orange-500" /> Thông tin cơ bản</h3>
-                        <InfoItem icon={<Mail />} label="Email công việc" value={user?.email} />
+                        <InfoItem icon={<Mail />} label="Email công việc" value={profile?.email} />
                         <InfoItem icon={<Phone />} label="Số điện thoại" value={profile?.phone} />
                         <InfoItem icon={<MapPin />} label="Địa chỉ" value={profile?.address} />
                     </div>
@@ -173,7 +207,7 @@ const Information = () => {
                         <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Lock size={18} className="text-orange-500" /> Đổi mật khẩu</h3>
                         {pendingPwdRequest ? (
                             <div className="bg-blue-50 border border-blue-100 p-6 rounded-3xl flex flex-col items-center text-center gap-3">
-                                <Clock className="text-blue-500 animate-spin-slow" size={32} />
+                                <Clock className="text-blue-500 animate-spin" size={32} />
                                 <p className="text-blue-800 font-black text-[10px] uppercase">Đang chờ Admin duyệt pass mới</p>
                             </div>
                         ) : (
@@ -213,8 +247,8 @@ const Information = () => {
                 <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm">
                     <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Briefcase size={18} className="text-orange-500" /> Công việc & Lương</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <InfoItem icon={<Calendar />} label="Ngày gia nhập" value={profile?.hireDate} />
-                        <InfoItem icon={<Shield />} label="Quyền hạn" value={user?.role.toUpperCase()} />
+                        <InfoItem icon={<Calendar />} label="Ngày gia nhập" value={profile?.hire_date} />
+                        <InfoItem icon={<Shield />} label="Quyền hạn" value={profile?.role?.toUpperCase()} />
                         <div className="flex items-start gap-4 p-2 overflow-hidden">
                             <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-orange-500 shrink-0 font-black">$</div>
                             <div>
@@ -226,7 +260,7 @@ const Information = () => {
                 </div>
 
                 {/* KHỐI 4: CHỌN LỊCH RẢNH (CHỈ GIẢNG VIÊN) */}
-                {user?.role === 'teacher' && (
+                {profile?.role === 'teacher' && (
                     <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm animate-in zoom-in duration-500">
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                             <div>
@@ -269,7 +303,6 @@ const Information = () => {
                     </div>
                 )}
             </div>
-            <style>{` @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .animate-spin-slow { animation: spin-slow 8s linear infinite; } `}</style>
         </div>
     );
 };

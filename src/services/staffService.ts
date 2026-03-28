@@ -1,179 +1,180 @@
-// --- FILE: src/services/staffService.ts ---
 import { supabase } from '../supabaseClient';
 
-// 1. Interface chuẩn khớp 100% với bảng 'staffs' trong Database
+// 1. ĐỊNH NGHĨA INTERFACE DỮ LIỆU
 export interface StaffData {
     id?: string;
-    user_id?: string;      // ID từ bảng users/auth
+    user_id?: string;
     name: string;
     email: string;
-    phone: string;
+    phone?: string;
     cccd?: string;
-    address: string;
-    gender?: string;       // Male / Female / Other
-    role: 'admin' | 'teacher' | 'pt' | 'sale' | 'finance'; // Role động
-    salary: number;
-    hire_date: string;     // Định dạng YYYY-MM-DD
+    address?: string;
+    role: 'admin' | 'sale' | 'finance' | 'teacher' | 'pt';
+    salary?: number;
+    hire_date?: string;
     bio?: string;
     status: 'active' | 'inactive';
-    fixed_schedule?: string[]; // Mảng các thứ trong tuần
+    fixed_schedule?: any; // Dành cho giảng viên
     created_at?: string;
 }
 
-const TABLE_NAME = 'staffs';
-
-/**
- * 2. Lấy danh sách nhân sự theo Vị trí (Real-time)
- * Dùng cho trang TeacherManagement (position = 'teacher')
- */
-export const subscribeToStaffByPosition = async (position: string, callback: (staffs: StaffData[]) => void) => {
-    // Lấy dữ liệu lần đầu
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .eq('role', position)
-        .order('name', { ascending: true });
-
-    if (!error && data) callback(data as StaffData[]);
-
-    // Thiết lập kênh lắng nghe thay đổi
-    return supabase
-        .channel(`public:staffs:role:${position}`)
-        .on('postgres_changes',
-            { event: '*', schema: 'public', table: TABLE_NAME, filter: `role=eq.${position}` },
-            async () => {
-                const { data: updatedData } = await supabase
-                    .from(TABLE_NAME)
-                    .select('*')
-                    .eq('role', position);
-                if (updatedData) callback(updatedData as StaffData[]);
-            }
-        )
-        .subscribe();
-};
-
-/**
- * 3. Lấy danh sách nhân sự loại trừ một số vị trí (Real-time)
- * Dùng cho trang StaffManagement (loại trừ teacher, pt)
- */
-export const subscribeToStaffsFiltered = async (excludeRoles: string[], callback: (data: StaffData[]) => void) => {
-    // Lấy dữ liệu lần đầu
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .not('role', 'in', `(${excludeRoles.join(',')})`)
-        .order('created_at', { ascending: false });
-
-    if (!error && data) callback(data as StaffData[]);
-
-    // Thiết lập kênh lắng nghe
-    return supabase
-        .channel('public:staffs:filtered')
-        .on('postgres_changes',
-            { event: '*', schema: 'public', table: TABLE_NAME },
-            async () => {
-                const { data: updatedData } = await supabase
-                    .from(TABLE_NAME)
-                    .select('*')
-                    .not('role', 'in', `(${excludeRoles.join(',')})`);
-                if (updatedData) callback(updatedData as StaffData[]);
-            }
-        )
-        .subscribe();
-};
-
-/**
- * 4. Tạo hồ sơ nhân sự mới
- * Tự động ánh xạ các trường để tránh lỗi 400 Bad Request
- */
+// 2. TẠO NHÂN VIÊN (Tạo Users trước -> Lấy ID tạo Staffs)
 export const createStaff = async (formData: any) => {
     try {
-        // Tách các trường không thuộc bảng staffs (như password)
-        const { password, ...rest } = formData;
+        const email = formData.email?.toLowerCase().trim();
+        const role = formData.role || formData.position || 'sale';
 
-        const staffToInsert = {
-            name: rest.name,
-            email: rest.email?.toLowerCase().trim(),
-            phone: rest.phone,
-            address: rest.address,
-            role: rest.role, // Lấy role từ form (Admin/Sale/Teacher...)
-            salary: Number(rest.salary) || 0,
-            hire_date: rest.hire_date || rest.hireDate || new Date().toISOString().split('T')[0],
-            status: rest.status || 'active',
-            cccd: rest.cccd || '',
-            bio: rest.bio || '',
-            gender: rest.gender || 'Male',
-            fixed_schedule: rest.fixed_schedule || rest.fixedSchedule || []
-        };
+        // BƯỚC A: Tạo tài khoản trong bảng 'users'
+        const { data: newUser, error: userError } = await supabase
+            .from('users')
+            .insert([{
+                username: email,
+                password: '123456', // Mật khẩu mặc định
+                role: role,
+                status: 'active'
+            }])
+            .select()
+            .single();
 
-        const { data, error } = await supabase
-            .from(TABLE_NAME)
-            .insert([staffToInsert])
+        if (userError) throw userError;
+
+        // BƯỚC B: Tạo hồ sơ trong bảng 'staffs' liên kết với user_id vừa tạo
+        const { data: staff, error: staffError } = await supabase
+            .from('staffs')
+            .insert([{
+                user_id: newUser.id,
+                name: formData.name,
+                email: email,
+                phone: formData.phone,
+                address: formData.address,
+                role: role,
+                salary: Number(formData.salary) || 0,
+                hire_date: formData.hire_date || new Date().toISOString().split('T')[0],
+                status: 'active',
+                cccd: formData.cccd || '',
+                bio: formData.bio || ''
+            }])
             .select();
 
-        if (error) throw error;
-        return data[0];
+        if (staffError) throw staffError;
+        return staff[0];
     } catch (error) {
-        console.error("Lỗi createStaff:", error);
+        console.error("Lỗi tạo nhân viên:", error);
         throw error;
     }
 };
 
-/**
- * 5. Cập nhật hồ sơ nhân sự
- */
-export const updateStaff = async (id: string, updateData: any) => {
+// 3. CẬP NHẬT NHÂN VIÊN
+export const updateStaff = async (id: string, data: any) => {
     try {
-        // Đảm bảo dữ liệu gửi lên dùng snake_case
-        const mappedData: any = { ...updateData };
-        if (updateData.hireDate) {
-            mappedData.hire_date = updateData.hireDate;
-            delete mappedData.hireDate;
-        }
-        if (updateData.fixedSchedule) {
-            mappedData.fixed_schedule = updateData.fixedSchedule;
-            delete mappedData.fixedSchedule;
-        }
-
         const { error } = await supabase
-            .from(TABLE_NAME)
-            .update(mappedData)
+            .from('staffs')
+            .update(data)
             .eq('id', id);
 
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Lỗi updateStaff:", error);
+        console.error("Lỗi cập nhật nhân viên:", error);
         throw error;
     }
 };
 
-/**
- * 6. Xóa nhân sự
- */
-export const deleteStaff = async (id: string) => {
-    const { error } = await supabase
-        .from(TABLE_NAME)
-        .delete()
-        .eq('id', id);
+// 4. XÓA NHÂN VIÊN (Xóa hồ sơ Staff và xóa luôn tài khoản User)
+export const deleteStaff = async (staffId: string) => {
+    try {
+        // Bước 1: Tìm user_id liên kết với nhân viên này
+        const { data: staff, error: fetchError } = await supabase
+            .from('staffs')
+            .select('user_id')
+            .eq('id', staffId)
+            .single();
 
-    if (error) throw error;
-    return true;
+        if (fetchError) throw fetchError;
+        const linkedUserId = staff?.user_id;
+
+        // Bước 2: Xóa trong bảng staffs
+        const { error: staffDelError } = await supabase
+            .from('staffs')
+            .delete()
+            .eq('id', staffId);
+
+        if (staffDelError) throw staffDelError;
+
+        // Bước 3: Nếu có tài khoản liên kết, xóa luôn trong bảng users
+        if (linkedUserId) {
+            const { error: userDelError } = await supabase
+                .from('users')
+                .delete()
+                .eq('id', linkedUserId);
+
+            if (userDelError) throw userDelError;
+        }
+
+        return true;
+    } catch (error) {
+        console.error("Lỗi xóa nhân sự và tài khoản:", error);
+        throw error;
+    }
 };
 
-/**
- * 7. Lấy hồ sơ cá nhân theo Email
- */
-export const getStaffProfile = async (email: string) => {
-    const { data, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle(); // maybeSingle trả về null thay vì lỗi nếu không tìm thấy
+// 5. LẮNG NGHE NHÂN SỰ THEO ROLE (Dùng cho LeadManagement.tsx)
+export const subscribeToStaffByPosition = (role: string, callback: (data: any[]) => void) => {
+    const fetchStaffs = async () => {
+        const { data, error } = await supabase
+            .from('staffs')
+            .select('*')
+            .eq('role', role)
+            .eq('status', 'active');
 
-    if (error) {
-        console.error("Lỗi getStaffProfile:", error);
+        if (!error && data) callback(data);
+    };
+
+    fetchStaffs();
+
+    return supabase
+        .channel(`realtime_staffs_${role}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs', filter: `role=eq.${role}` }, () => {
+            fetchStaffs();
+        })
+        .subscribe();
+};
+
+// 6. LẮNG NGHE NHÂN SỰ VẬN HÀNH (Loại trừ giáo viên/PT - Dùng cho StaffManagement.tsx)
+export const subscribeToStaffsFiltered = (excludeRoles: string[], callback: (data: any[]) => void) => {
+    const fetch = async () => {
+        const { data, error } = await supabase
+            .from('staffs')
+            .select('*')
+            .not('role', 'in', `(${excludeRoles.join(',')})`)
+            .order('name', { ascending: true });
+
+        if (!error && data) callback(data);
+    };
+
+    fetch();
+
+    return supabase
+        .channel('staffs_operational_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, () => {
+            fetch();
+        })
+        .subscribe();
+};
+
+// 7. LẤY HỒ SƠ NHÂN VIÊN THEO EMAIL (Dùng cho Course.tsx / Auth)
+export const getStaffProfile = async (email: string) => {
+    try {
+        const { data, error } = await supabase
+            .from('staffs')
+            .select('*')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error("Lỗi lấy hồ sơ nhân viên:", error);
         return null;
     }
-    return data as StaffData;
 };
