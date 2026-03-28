@@ -1,164 +1,179 @@
-import { db } from '../firebase';
-import {
-    collection,
-    addDoc,
-    serverTimestamp,
-    query,
-    onSnapshot,
-    orderBy,
-    where,
-    getDocs,
-    limit,
-    doc,
-    updateDoc,
-    deleteDoc
-} from 'firebase/firestore';
-import { Role } from '../context/AuthContext';
+// --- FILE: src/services/staffService.ts ---
+import { supabase } from '../supabaseClient';
 
-// Định nghĩa Interface khớp với sơ đồ ERD và yêu cầu nhập liệu đầy đủ
+// 1. Interface chuẩn khớp 100% với bảng 'staffs' trong Database
 export interface StaffData {
     id?: string;
+    user_id?: string;      // ID từ bảng users/auth
     name: string;
-    email: string; // Dùng làm username đăng nhập (@talemy.edu)
+    email: string;
     phone: string;
+    cccd?: string;
     address: string;
-    gender: 'Male' | 'Female' | 'Other';
-    position: Role;
+    gender?: string;       // Male / Female / Other
+    role: 'admin' | 'teacher' | 'pt' | 'sale' | 'finance'; // Role động
     salary: number;
-    hireDate: string;
+    hire_date: string;     // Định dạng YYYY-MM-DD
+    bio?: string;
     status: 'active' | 'inactive';
-    cccd?: string; // THÊM TRƯỜNG NÀY
-    bio?: string;  // THÊM TRƯỜNG NÀY (Tiểu sử/Ghi chú)
+    fixed_schedule?: string[]; // Mảng các thứ trong tuần
+    created_at?: string;
 }
 
+const TABLE_NAME = 'staffs';
+
 /**
- * 1. Hàm tạo nhân sự mới (Dành cho Admin)
- * Thực hiện lưu đồng thời vào 2 collection: 'users' (để login) và 'staffs' (hồ sơ chi tiết)
+ * 2. Lấy danh sách nhân sự theo Vị trí (Real-time)
+ * Dùng cho trang TeacherManagement (position = 'teacher')
  */
-export const createStaff = async (data: StaffData & { password?: string }) => {
+export const subscribeToStaffByPosition = async (position: string, callback: (staffs: StaffData[]) => void) => {
+    // Lấy dữ liệu lần đầu
+    const { data, error } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .eq('role', position)
+        .order('name', { ascending: true });
+
+    if (!error && data) callback(data as StaffData[]);
+
+    // Thiết lập kênh lắng nghe thay đổi
+    return supabase
+        .channel(`public:staffs:role:${position}`)
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: TABLE_NAME, filter: `role=eq.${position}` },
+            async () => {
+                const { data: updatedData } = await supabase
+                    .from(TABLE_NAME)
+                    .select('*')
+                    .eq('role', position);
+                if (updatedData) callback(updatedData as StaffData[]);
+            }
+        )
+        .subscribe();
+};
+
+/**
+ * 3. Lấy danh sách nhân sự loại trừ một số vị trí (Real-time)
+ * Dùng cho trang StaffManagement (loại trừ teacher, pt)
+ */
+export const subscribeToStaffsFiltered = async (excludeRoles: string[], callback: (data: StaffData[]) => void) => {
+    // Lấy dữ liệu lần đầu
+    const { data, error } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .not('role', 'in', `(${excludeRoles.join(',')})`)
+        .order('created_at', { ascending: false });
+
+    if (!error && data) callback(data as StaffData[]);
+
+    // Thiết lập kênh lắng nghe
+    return supabase
+        .channel('public:staffs:filtered')
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: TABLE_NAME },
+            async () => {
+                const { data: updatedData } = await supabase
+                    .from(TABLE_NAME)
+                    .select('*')
+                    .not('role', 'in', `(${excludeRoles.join(',')})`);
+                if (updatedData) callback(updatedData as StaffData[]);
+            }
+        )
+        .subscribe();
+};
+
+/**
+ * 4. Tạo hồ sơ nhân sự mới
+ * Tự động ánh xạ các trường để tránh lỗi 400 Bad Request
+ */
+export const createStaff = async (formData: any) => {
     try {
-        // Tạo bản ghi login trong collection 'users'
-        const userRef = await addDoc(collection(db, "users"), {
-            username: data.email.toLowerCase(),
-            password: data.password || "123456", // Mật khẩu mặc định nếu Admin không nhập
-            role: data.position,
-            status: 'active',
-            createdAt: serverTimestamp()
-        });
+        // Tách các trường không thuộc bảng staffs (như password)
+        const { password, ...rest } = formData;
 
-        // Tạo hồ sơ nhân sự chi tiết trong collection 'staffs'
-        await addDoc(collection(db, "staffs"), {
-            user_id: userRef.id, // Liên kết với document bên collection users
-            ...data,
-            email: data.email.toLowerCase(),
-            salary: Number(data.salary),
-            createdAt: serverTimestamp()
-        });
+        const staffToInsert = {
+            name: rest.name,
+            email: rest.email?.toLowerCase().trim(),
+            phone: rest.phone,
+            address: rest.address,
+            role: rest.role, // Lấy role từ form (Admin/Sale/Teacher...)
+            salary: Number(rest.salary) || 0,
+            hire_date: rest.hire_date || rest.hireDate || new Date().toISOString().split('T')[0],
+            status: rest.status || 'active',
+            cccd: rest.cccd || '',
+            bio: rest.bio || '',
+            gender: rest.gender || 'Male',
+            fixed_schedule: rest.fixed_schedule || rest.fixedSchedule || []
+        };
 
-        return true;
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .insert([staffToInsert])
+            .select();
+
+        if (error) throw error;
+        return data[0];
     } catch (error) {
-        console.error("Lỗi khi tạo nhân sự:", error);
+        console.error("Lỗi createStaff:", error);
         throw error;
     }
 };
 
 /**
- * 2. Hàm lấy danh sách nhân sự Real-time (Dành cho trang Staff Management)
+ * 5. Cập nhật hồ sơ nhân sự
  */
-// 1. Sửa lại hàm subscribe để có thể lọc loại trừ
-export const subscribeToStaffsFiltered = (excludePositions: string[], callback: (data: StaffData[]) => void) => {
-    const q = query(
-        collection(db, "staffs"),
-        where("position", "not-in", excludePositions), // Lọc loại trừ teacher và pt
-        orderBy("position"),
-        orderBy("createdAt", "desc")
-    );
-    return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(document => ({
-            id: document.id,
-            ...document.data()
-        })) as StaffData[];
-        callback(data);
-    });
-};
-
-/**
- * 3. Hàm lấy thông tin chi tiết của một nhân sự (Dành cho trang Information)
- * Tự động tìm kiếm dựa trên email của tài khoản đang đăng nhập
- */
-export const getStaffProfile = async (email: string) => {
+export const updateStaff = async (id: string, updateData: any) => {
     try {
-        const q = query(
-            collection(db, "staffs"),
-            where("email", "==", email.toLowerCase()),
-            limit(1)
-        );
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            return {
-                id: querySnapshot.docs[0].id,
-                ...querySnapshot.docs[0].data()
-            } as StaffData;
+        // Đảm bảo dữ liệu gửi lên dùng snake_case
+        const mappedData: any = { ...updateData };
+        if (updateData.hireDate) {
+            mappedData.hire_date = updateData.hireDate;
+            delete mappedData.hireDate;
         }
-        return null;
-    } catch (error) {
-        console.error("Lỗi khi lấy thông tin cá nhân:", error);
-        throw error;
-    }
-};
+        if (updateData.fixedSchedule) {
+            mappedData.fixed_schedule = updateData.fixedSchedule;
+            delete mappedData.fixedSchedule;
+        }
 
-/**
- * 4. Hàm lấy danh sách Staff theo vị trí (Ví dụ: Chỉ lấy Giáo viên)
- */
-export const subscribeToStaffByPosition = (position: Role, callback: (staffs: StaffData[]) => void) => {
-    const q = query(
-        collection(db, "staffs"), 
-        where("position", "==", position)
-    );
-    return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(document => ({ 
-            id: document.id, 
-            ...document.data() 
-        })) as StaffData[];
-        callback(data);
-    });
-};
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .update(mappedData)
+            .eq('id', id);
 
-/**
- * 5. Hàm Cập nhật thông tin nhân sự / giáo viên
- */
-export const updateStaff = async (id: string, data: Partial<StaffData>) => {
-    try {
-        const staffRef = doc(db, "staffs", id);
-        await updateDoc(staffRef, data);
+        if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Lỗi cập nhật:", error);
+        console.error("Lỗi updateStaff:", error);
         throw error;
     }
 };
 
 /**
- * 6. Hàm Xóa nhân sự / giáo viên
+ * 6. Xóa nhân sự
  */
 export const deleteStaff = async (id: string) => {
-    try {
-        await deleteDoc(doc(db, "staffs", id));
-        return true;
-    } catch (error) {
-        console.error("Lỗi xóa:", error);
-        throw error;
-    }
+    const { error } = await supabase
+        .from(TABLE_NAME)
+        .delete()
+        .eq('id', id);
+
+    if (error) throw error;
+    return true;
 };
 
-export const updateUserPassword = async (userId: string, newPassword: string) => {
-    try {
-        const userRef = doc(db, "users", userId);
-        await updateDoc(userRef, { password: newPassword });
-        return true;
-    } catch (error) {
-        console.error("Lỗi đổi mật khẩu:", error);
-        throw error;
+/**
+ * 7. Lấy hồ sơ cá nhân theo Email
+ */
+export const getStaffProfile = async (email: string) => {
+    const { data, error } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle(); // maybeSingle trả về null thay vì lỗi nếu không tìm thấy
+
+    if (error) {
+        console.error("Lỗi getStaffProfile:", error);
+        return null;
     }
+    return data as StaffData;
 };

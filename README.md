@@ -30,18 +30,10 @@ docker-compose up -d
 ```cmd
 docker-compose exec frontend npm install
 ```
-
-## 4. Đăng nhập để lấy quyền truy cập Database
+## 4. Cài đặt thư viện và tạo client
 ```cmd
-# Cài công cụ Firebase nếu chưa có (cài trên máy thật)
-npm install -g firebase-tools
+npm install @supabase/supabase-js
 ```
-
-## 5. Đăng nhập firebase:
-```cmd
-firebase login
-```
-(Đăng nhập bằng chính email mà Huy đã mời ở Bước 2).
 
 ## 6. Cài đặt biểu đồ 
 ```cmd
