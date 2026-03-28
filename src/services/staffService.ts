@@ -1,6 +1,5 @@
 import { supabase } from '../supabaseClient';
 
-// 1. ĐỊNH NGHĨA INTERFACE DỮ LIỆU
 export interface StaffData {
     id?: string;
     user_id?: string;
@@ -9,172 +8,176 @@ export interface StaffData {
     phone?: string;
     cccd?: string;
     address?: string;
-    role: 'admin' | 'sale' | 'finance' | 'teacher' | 'pt';
-    salary?: number;
-    hire_date?: string;
+    gender: 'male' | 'female' | 'Nam' | 'Nữ'; // Khớp với form của bạn
+    role: 'teacher' | 'sale' | 'admin' | 'finance';
+    salary: number;
+    hire_date: string;
     bio?: string;
     status: 'active' | 'inactive';
-    fixed_schedule?: any; // Dành cho giảng viên
-    created_at?: string;
 }
 
-// 2. TẠO NHÂN VIÊN (Tạo Users trước -> Lấy ID tạo Staffs)
+// 1. TẠO NHÂN VIÊN/GIẢNG VIÊN (Logic Rollback an toàn)
 export const createStaff = async (formData: any) => {
+    let createdUserId: string | null = null;
+
     try {
         const email = formData.email?.toLowerCase().trim();
-        const role = formData.role || formData.position || 'sale';
+        // Lấy position từ position hoặc role (tùy form gửi lên)
+        const pos = formData.position || formData.role || 'teacher';
 
-        // BƯỚC A: Tạo tài khoản trong bảng 'users'
+        // BƯỚC 1: KIỂM TRA XEM USER ĐÃ TỒN TẠI CHƯA (Tránh lỗi kẹt từ trước)
+        const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('username', email)
+            .maybeSingle();
+
+        if (existingUser) {
+            // Nếu User đã tồn tại nhưng không có Staff, ta xóa User cũ này đi để làm mới
+            const { data: linkedStaff } = await supabase
+                .from('staffs')
+                .select('id')
+                .eq('user_id', existingUser.id)
+                .maybeSingle();
+
+            if (!linkedStaff) {
+                await supabase.from('users').delete().eq('id', existingUser.id);
+            } else {
+                throw new Error("Email này đã được sử dụng bởi một nhân sự khác!");
+            }
+        }
+
+        // BƯỚC 2: Tạo tài khoản trong bảng 'users'
         const { data: newUser, error: userError } = await supabase
             .from('users')
             .insert([{
                 username: email,
-                password: '123456', // Mật khẩu mặc định
-                role: role,
+                password: '123456', // Pass mặc định
+                role: pos,
                 status: 'active'
             }])
             .select()
             .single();
 
         if (userError) throw userError;
+        createdUserId = newUser.id;
 
-        // BƯỚC B: Tạo hồ sơ trong bảng 'staffs' liên kết với user_id vừa tạo
+        // BƯỚC 3: Tạo hồ sơ trong bảng 'staffs'
+        // LƯU Ý: Tên cột phải khớp 100% với SQL (user_id, name, position...)
         const { data: staff, error: staffError } = await supabase
             .from('staffs')
             .insert([{
-                user_id: newUser.id,
+                user_id: createdUserId,
                 name: formData.name,
                 email: email,
                 phone: formData.phone,
-                address: formData.address,
-                role: role,
-                salary: Number(formData.salary) || 0,
-                hire_date: formData.hire_date || new Date().toISOString().split('T')[0],
-                status: 'active',
                 cccd: formData.cccd || '',
-                bio: formData.bio || ''
+                address: formData.address || '',
+                gender: formData.gender,
+                role: pos,
+                salary: Number(formData.salary) || 0,
+                hire_date: formData.hire_date,
+                bio: formData.bio || '',
+                status: 'active'
             }])
             .select();
 
-        if (staffError) throw staffError;
+        if (staffError) {
+            // NẾU LỖI TẠO STAFF -> XÓA NGAY USER VỪA TẠO ĐỂ KHÔNG BỊ TRÙNG EMAIL LẦN SAU
+            if (createdUserId) {
+                await supabase.from('users').delete().eq('id', createdUserId);
+            }
+            throw staffError;
+        }
+
         return staff[0];
-    } catch (error) {
-        console.error("Lỗi tạo nhân viên:", error);
+
+    } catch (error: any) {
+        console.error("Lỗi chi tiết từ Supabase:", error);
+        // Fallback cuối cùng để dọn dẹp
+        if (createdUserId) {
+            await supabase.from('users').delete().eq('id', createdUserId);
+        }
         throw error;
     }
 };
 
-// 3. CẬP NHẬT NHÂN VIÊN
+// 2. CẬP NHẬT NHÂN VIÊN
 export const updateStaff = async (id: string, data: any) => {
     try {
         const { error } = await supabase
             .from('staffs')
             .update(data)
             .eq('id', id);
-
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Lỗi cập nhật nhân viên:", error);
         throw error;
     }
 };
 
-// 4. XÓA NHÂN VIÊN (Xóa hồ sơ Staff và xóa luôn tài khoản User)
+// 3. XÓA NHÂN VIÊN (Xóa cả Staff và User)
 export const deleteStaff = async (staffId: string) => {
     try {
-        // Bước 1: Tìm user_id liên kết với nhân viên này
-        const { data: staff, error: fetchError } = await supabase
+        const { data: staff } = await supabase
             .from('staffs')
             .select('user_id')
             .eq('id', staffId)
             .single();
 
-        if (fetchError) throw fetchError;
         const linkedUserId = staff?.user_id;
 
-        // Bước 2: Xóa trong bảng staffs
-        const { error: staffDelError } = await supabase
-            .from('staffs')
-            .delete()
-            .eq('id', staffId);
+        // Xóa Staff trước
+        await supabase.from('staffs').delete().eq('id', staffId);
 
-        if (staffDelError) throw staffDelError;
-
-        // Bước 3: Nếu có tài khoản liên kết, xóa luôn trong bảng users
+        // Xóa User sau
         if (linkedUserId) {
-            const { error: userDelError } = await supabase
-                .from('users')
-                .delete()
-                .eq('id', linkedUserId);
-
-            if (userDelError) throw userDelError;
+            await supabase.from('users').delete().eq('id', linkedUserId);
         }
-
         return true;
     } catch (error) {
-        console.error("Lỗi xóa nhân sự và tài khoản:", error);
         throw error;
     }
 };
 
-// 5. LẮNG NGHE NHÂN SỰ THEO ROLE (Dùng cho LeadManagement.tsx)
-export const subscribeToStaffByPosition = (role: string, callback: (data: any[]) => void) => {
-    const fetchStaffs = async () => {
-        const { data, error } = await supabase
+// 4. LẮNG NGHE STAFF THEO POSITION
+export const subscribeToStaffByPosition = (pos: string, callback: (data: any[]) => void) => {
+    const fetch = async () => {
+        const { data } = await supabase
             .from('staffs')
             .select('*')
-            .eq('role', role)
+            .eq('role', pos)
             .eq('status', 'active');
-
-        if (!error && data) callback(data);
+        if (data) callback(data);
     };
-
-    fetchStaffs();
-
-    return supabase
-        .channel(`realtime_staffs_${role}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs', filter: `role=eq.${role}` }, () => {
-            fetchStaffs();
-        })
+    fetch();
+    return supabase.channel(`staffs_${pos}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, fetch)
         .subscribe();
 };
 
-// 6. LẮNG NGHE NHÂN SỰ VẬN HÀNH (Loại trừ giáo viên/PT - Dùng cho StaffManagement.tsx)
+// 5. LẮNG NGHE STAFF FILTERED (Dùng cho operational staff)
 export const subscribeToStaffsFiltered = (excludeRoles: string[], callback: (data: any[]) => void) => {
     const fetch = async () => {
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('staffs')
             .select('*')
             .not('role', 'in', `(${excludeRoles.join(',')})`)
             .order('name', { ascending: true });
-
-        if (!error && data) callback(data);
+        if (data) callback(data);
     };
-
     fetch();
-
-    return supabase
-        .channel('staffs_operational_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, () => {
-            fetch();
-        })
+    return supabase.channel('staffs_ops')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, fetch)
         .subscribe();
 };
 
-// 7. LẤY HỒ SƠ NHÂN VIÊN THEO EMAIL (Dùng cho Course.tsx / Auth)
+// 6. LẤY PROFILE THEO EMAIL
 export const getStaffProfile = async (email: string) => {
-    try {
-        const { data, error } = await supabase
-            .from('staffs')
-            .select('*')
-            .eq('email', email)
-            .maybeSingle();
-
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        console.error("Lỗi lấy hồ sơ nhân viên:", error);
-        return null;
-    }
+    const { data } = await supabase
+        .from('staffs')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+    return data;
 };
