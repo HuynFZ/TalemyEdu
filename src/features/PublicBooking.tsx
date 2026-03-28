@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { db } from '../firebase';
-import {
-    doc, getDoc, collection, query, where, onSnapshot,
-    addDoc, deleteDoc, serverTimestamp, orderBy, getDocs
-} from 'firebase/firestore';
 import {
     Clock, Calendar, CheckCircle2, AlertCircle, Trash2,
     Plus, CalendarDays, AlertTriangle, ExternalLink, Loader2, ChevronDown
