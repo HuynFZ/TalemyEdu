@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-// Import routing
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import {
     LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut,
-    Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck
+    Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck,
+    CalendarDays // 1. Đã thêm icon này
 } from 'lucide-react';
 
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
@@ -17,7 +17,8 @@ import Information from './features/Information';
 import ContractManagement from './features/ContractManagement';
 import TeacherManagement from './features/TeacherManagement';
 import StudentManagement from './features/StudentManagement';
-import PublicBooking from './features/PublicBooking'; // Trang chọn lịch công khai
+import TeacherCalendar from './features/TeacherCalendar'; // 2. Đã import component này
+import PublicBooking from './features/PublicBooking';
 
 interface MenuItem {
     id: string;
@@ -28,23 +29,23 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Bảng điều khiển', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
+
     { id: 'pipeline', label: 'Quy trình tư vấn', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
     { id: 'contract', label: 'Hợp đồng', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
     { id: 'course', label: 'Khóa học', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
     { id: 'teacher', label: 'Giảng viên', icon: <BookUser size={20} />, roles: ['admin'] },
+    { id: 'calendar', label: 'Lịch giảng dạy', icon: <CalendarDays size={20} />, roles: ['admin', 'teacher', 'sale'] },
     { id: 'student', label: 'Học viên', icon: <UserCheck size={20} />, roles: ['admin', 'sale', 'finance'] },
     { id: 'finance', label: 'Tài chính', icon: <CreditCard size={20} />, roles: ['admin', 'finance'] },
     { id: 'staff', label: 'Nhân sự vận hành', icon: <UsersIcon size={20} />, roles: ['admin'] },
     { id: 'info', label: 'Thông tin cá nhân', icon: <UserCircle size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
 ];
 
-// --- COMPONENT CHÍNH CỦA HỆ THỐNG QUẢN TRỊ ---
 function MainLayout() {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState<string>('dashboard');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-    // Nếu chưa đăng nhập thì chuyển về trang Login (ngoại trừ các route public đã xử lý ở App)
     if (!user) return <Navigate to="/login" />;
 
     const filteredMenu = menuItems.filter(item => item.roles.includes(user.role));
@@ -53,6 +54,7 @@ function MainLayout() {
         switch (activeTab) {
             case 'dashboard': return <Dashboard />;
             case 'info': return <Information />;
+            case 'calendar': return <TeacherCalendar />;
             case 'staff': return <StaffManagement />;
             case 'finance': return <Finance />;
             case 'course': return <Course />;
@@ -79,12 +81,10 @@ function MainLayout() {
                 </button>
             </div>
 
-            {/* OVERLAY */}
             {isSidebarOpen && (
                 <div className="lg:hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            {/* SIDEBAR */}
             <aside className={`
                 fixed lg:relative inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm transition-transform duration-300
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
@@ -133,7 +133,6 @@ function MainLayout() {
                 </div>
             </aside>
 
-            {/* MAIN CONTENT AREA */}
             <main className="flex-1 overflow-y-auto h-full pt-20 lg:pt-0">
                 {renderContent()}
             </main>
@@ -141,22 +140,14 @@ function MainLayout() {
     );
 }
 
-// --- CẤU HÌNH ROUTING TOÀN ỨNG DỤNG ---
 export default function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
                 <Routes>
-                    {/* 1. Trang Đăng nhập */}
                     <Route path="/login" element={<LoginWrapper />} />
-
-                    {/* 2. Trang chọn lịch công khai cho học viên (KHÔNG CẦN LOGIN) */}
                     <Route path="/booking/:classId" element={<PublicBooking />} />
-
-                    {/* 3. Toàn bộ hệ thống quản trị nội bộ */}
                     <Route path="/*" element={<MainLayout />} />
-
-                    {/* Mặc định về trang chủ */}
                     <Route path="/" element={<Navigate to="/dashboard" />} />
                 </Routes>
             </AuthProvider>
@@ -164,10 +155,8 @@ export default function App() {
     );
 }
 
-// Helper để xử lý logic Login
 function LoginWrapper() {
     const { user } = useAuth();
-    // Nếu đã đăng nhập rồi thì đá về dashboard luôn
     if (user) return <Navigate to="/dashboard" />;
     return <Login />;
 }
