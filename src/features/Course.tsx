@@ -5,19 +5,20 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ClassManagement from './ClassManagement';
-import { getStaffProfile } from '../services/staffService'; // Đảm bảo đã import hàm này
+import { getStaffProfile } from '../services/staffService';
+import { subscribeToCourses, createCourse, CourseData } from '../services/courseService';
+import { supabase } from '../supabaseClient';
 
 const Course = () => {
     const { user } = useAuth();
-    const [courses, setCourses] = useState<any[]>([]);
+    const [courses, setCourses] = useState<CourseData[]>([]);
     const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCourse, setSelectedCourse] = useState<{id: string, name: string} | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Form tạo khóa học đầy đủ thông tin
-    const [newCourse, setNewCourse] = useState({
+    const [newCourse, setNewCourse] = useState<Omit<CourseData, 'id' | 'created_at'>>({
         name: '',
         description: '',
         level: 'Intermediate',
@@ -29,55 +30,51 @@ const Course = () => {
     useEffect(() => {
         if (!user) return;
 
+        let courseSub: any;
+        let classSub: any;
+
         if (user.role === 'admin') {
-            // ADMIN: Xem tất cả khóa học
-            const q = query(collection(db, "courses"), orderBy("createdAt", "desc"));
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            // ADMIN: Dùng service đã viết ở trên
+            courseSub = subscribeToCourses((data) => {
+                setCourses(data);
                 setLoading(false);
             });
-            return () => unsubscribe();
         } else if (user.role === 'teacher') {
-            // GIẢNG VIÊN: Chỉ xem lớp của mình
-            const fetchTeacherDataAndClasses = async () => {
-                // 1. Tìm hồ sơ staff dựa trên email đang đăng nhập
+            // GIẢNG VIÊN: Lọc lớp học của chính mình
+            const fetchTeacherClasses = async () => {
                 const profile = await getStaffProfile(user.email);
-
-                if (profile && profile.id) {
-                    // 2. Truy vấn lớp học dựa trên teacherId (Chính xác nhất)
-                    // hoặc dùng profile.name nếu bạn chỉ lưu tên
-                    const q = query(
-                        collection(db, "classes"),
-                        where("teacherId", "==", profile.id) // Lọc chính xác theo ID giảng viên
-                    );
-
-                    const unsubscribe = onSnapshot(q, (snapshot) => {
-                        setTeacherClasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                        setLoading(false);
-                    });
-                    return unsubscribe;
+                if (profile?.id) {
+                    const { data } = await supabase
+                        .from('classes')
+                        .select('*')
+                        .eq('teacher_id', profile.id);
+                    if (data) setTeacherClasses(data);
+                    setLoading(false);
                 }
             };
-
-            let unsub: any;
-            fetchTeacherDataAndClasses().then(u => unsub = u);
-            return () => unsub && unsub();
+            fetchTeacherClasses();
+            // Thiết lập realtime cho classes nếu cần
+            classSub = supabase.channel('teacher_classes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, fetchTeacherClasses)
+                .subscribe();
         }
+
+        return () => {
+            if (courseSub) courseSub.unsubscribe();
+            if (classSub) classSub.unsubscribe();
+        };
     }, [user]);
 
     const handleCreateCourse = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await addDoc(collection(db, "courses"), {
-                ...newCourse,
-                price: Number(newCourse.price),
-                duration: Number(newCourse.duration),
-                createdAt: serverTimestamp()
-            });
+            await createCourse(newCourse);
             setShowModal(false);
             setNewCourse({ name: '', description: '', level: 'Intermediate', price: 0, duration: 0, status: 'active' });
             alert("Tạo khóa học thành công!");
-        } catch (error) { alert("Lỗi tạo khóa học!"); }
+        } catch (error) {
+            alert("Lỗi tạo khóa học!");
+        }
     };
 
     if (selectedCourse) {
@@ -95,7 +92,7 @@ const Course = () => {
         <div className="p-4 md:p-8 bg-slate-50 min-h-screen relative font-sans">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Quản lý khóa học (LMS)</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase italic">Quản lý khóa học (LMS)</h2>
                     <p className="text-slate-500 text-sm font-medium italic">Điều phối giảng viên và danh mục đào tạo.</p>
                 </div>
                 {user?.role === 'admin' && (
@@ -119,7 +116,9 @@ const Course = () => {
                     courses.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase())).map((course) => (
                         <div key={course.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-md transition-all group">
                             <div className="flex justify-between items-start mb-6">
-                                <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-100"><BookOpen size={28} /></div>
+                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner border border-blue-100 uppercase font-black text-2xl">
+                                    {course.name.charAt(0)}
+                                </div>
                                 <button className="text-slate-300 hover:text-slate-500"><MoreHorizontal size={20} /></button>
                             </div>
                             <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">{course.name}</h3>
@@ -132,7 +131,7 @@ const Course = () => {
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="px-3 py-1 bg-green-50 text-green-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-green-100">ACTIVE</span>
-                                <button onClick={() => setSelectedCourse({ id: course.id, name: course.name })} className="text-orange-600 font-black text-sm flex items-center gap-1 hover:gap-2 transition-all">Quản lý danh sách →</button>
+                                <button onClick={() => setSelectedCourse({ id: course.id!, name: course.name })} className="text-orange-600 font-black text-sm flex items-center gap-1 hover:gap-2 transition-all">Quản lý danh sách →</button>
                             </div>
                         </div>
                     ))
@@ -143,15 +142,15 @@ const Course = () => {
                                 <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg"><GraduationCap size={28} /></div>
                                 <div className="px-3 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-orange-100">LỚP HỌC 1-1</div>
                             </div>
-                            <h3 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight italic">{cls.className}</h3>
-                            <p className="text-slate-400 text-xs font-bold mb-6 flex items-center gap-1"><Clock size={12}/> Ngày khai giảng: {cls.startDate}</p>
+                            <h3 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight italic">{cls.class_name}</h3>
+                            <p className="text-slate-400 text-xs font-bold mb-6 flex items-center gap-1"><Clock size={12}/> Ngày khai giảng: {cls.start_date}</p>
                             <div className="grid grid-cols-2 gap-y-4 mb-8 border-y border-slate-50 py-6">
-                                <InfoBadge icon={<User size={14}/>} label="Học viên" value={cls.studentName} />
-                                <InfoBadge icon={<Clock size={14}/>} label="Tổng buổi" value={`${cls.totalSessions} buổi`} />
+                                <InfoBadge icon={<User size={14}/>} label="Học viên" value={cls.student_name} />
+                                <InfoBadge icon={<Clock size={14}/>} label="Tổng buổi" value={`${cls.total_sessions} buổi`} />
                                 <InfoBadge icon={<Video size={14}/>} label="Phòng học" value="Zoom Online" />
                                 <InfoBadge icon={<Layers size={14}/>} label="Tiến độ" value={cls.status} />
                             </div>
-                            <button onClick={() => setSelectedCourse({ id: cls.id, name: cls.className })} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-orange-500 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs shadow-lg active:scale-95">Vào điểm danh & Xem lộ trình <ChevronRight size={18}/></button>
+                            <button onClick={() => setSelectedCourse({ id: cls.id, name: cls.class_name })} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-orange-500 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs shadow-lg active:scale-95">Vào điểm danh & Xem lộ trình <ChevronRight size={18}/></button>
                         </div>
                     ))
                 )}
