@@ -8,7 +8,7 @@ export interface CourseData {
     description: string;
     level: 'Beginner' | 'Intermediate' | 'Advanced';
     price: number;
-    duration: number; // Số buổi học
+    duration: number;
     status: 'active' | 'inactive' | 'upcoming';
     created_at?: string;
 }
@@ -45,50 +45,23 @@ export const subscribeToCourses = (callback: (courses: CourseData[]) => void) =>
     };
 };
 
-// 3. Hàm thêm khóa học mới
+// 3. Thêm khóa học mới
 export const createCourse = async (course: Omit<CourseData, 'id' | 'created_at'>) => {
-    try {
-        const { data, error } = await supabase
-            .from(TABLE_NAME)
-            .insert([course])
-            .select();
+    const { data, error } = await supabase
+        .from(TABLE_NAME)
+        .insert([course])
+        .select();
 
-        if (error) throw error;
-        return data[0].id;
-    } catch (error) {
-        console.error("Error adding course: ", error);
-        throw error;
-    }
+    if (error) throw error;
+    return data[0];
 };
 
-// 4. Hàm cập nhật khóa học
+// 4. Cập nhật khóa học
 export const updateCourse = async (id: string, updateData: Partial<CourseData>) => {
-    try {
-        const { error } = await supabase
-            .from(TABLE_NAME)
-            .update(updateData)
-            .eq('id', id);
+    const { error } = await supabase
+        .from(TABLE_NAME)
+        .update(updateData)
+        .eq('id', id);
 
-        if (error) throw error;
-        return true;
-    } catch (error) {
-        console.error("Error updating course: ", error);
-        throw error;
-    }
-};
-
-// 5. Hàm xóa khóa học
-export const deleteCourse = async (id: string) => {
-    try {
-        const { error } = await supabase
-            .from(TABLE_NAME)
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-        return true;
-    } catch (error) {
-        console.error("Error deleting course: ", error);
-        throw error;
-    }
+    if (error) throw error;
 };

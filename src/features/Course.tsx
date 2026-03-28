@@ -19,14 +19,14 @@ const Course = () => {
     const [selectedCourse, setSelectedCourse] = useState<{id: string, name: string} | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Form tạo khóa học
-    const [newCourse, setNewCourse] = useState({
+    // Form tạo khóa học (Đã giữ lại Type chuẩn từ nhánh mới pull về)
+    const [newCourse, setNewCourse] = useState<Omit<CourseData, 'id' | 'created_at'>>({
         name: '',
         description: '',
-        level: 'Intermediate' as 'Beginner' | 'Intermediate' | 'Advanced',
+        level: 'Intermediate',
         price: 0,
         duration: 0,
-        status: 'active' as 'active' | 'inactive' | 'upcoming'
+        status: 'active'
     });
 
     useEffect(() => {
@@ -98,9 +98,10 @@ const Course = () => {
                     setLoading(false);
                 }
             };
+
             fetchTeacherClasses();
         } else {
-            // NẾU LÀ SALE HOẶC NHÂN VIÊN KHÁC: Vẫn phải tắt loading để tránh lỗi trắng trang
+            // NẾU LÀ SALE HOẶC NHÂN VIÊN KHÁC: Tắt loading để tránh lỗi trắng trang
             setLoading(false);
         }
 
@@ -146,7 +147,7 @@ const Course = () => {
         <div className="p-4 md:p-8 bg-slate-50 min-h-screen relative font-sans">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Quản lý khóa học (LMS)</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase italic">Quản lý khóa học (LMS)</h2>
                     <p className="text-slate-500 text-sm font-medium italic">Điều phối giảng viên và danh mục đào tạo.</p>
                 </div>
                 {user?.role === 'admin' && (
@@ -167,11 +168,12 @@ const Course = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {user?.role === 'admin' ? (
-                    // FIX LỖI TẠI ĐÂY: Dùng (c.name || '') để chống lỗi văng app khi course.name bị rỗng
                     courses.filter(c => (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())).map((course) => (
                         <div key={course.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-md transition-all group">
                             <div className="flex justify-between items-start mb-6">
-                                <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-100"><BookOpen size={28} /></div>
+                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner border border-blue-100 uppercase font-black text-2xl">
+                                    {(course.name || 'C').charAt(0)}
+                                </div>
                                 <button className="text-slate-300 hover:text-slate-500"><MoreHorizontal size={20} /></button>
                             </div>
                             <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">{course.name || 'Khóa học chưa có tên'}</h3>

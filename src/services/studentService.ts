@@ -1,7 +1,7 @@
 // --- FILE: src/services/studentService.ts ---
 import { supabase } from '../supabaseClient';
 
-// Đã cập nhật Interface theo chuẩn SQL Normalization mới nhất
+// Đã chuẩn hóa: Loại bỏ các trường học phí, lớp học để nhường cho bảng contracts
 export interface StudentData {
     id?: string;
     student_code: string;   
@@ -11,14 +11,14 @@ export interface StudentData {
     email: string;
     cccd: string;
     address: string;
-    status: string; // 'Đang học', 'Bảo lưu', 'Đã tốt nghiệp'
+    status: string; // 'Đang học', 'Bảo lưu', 'Đã tốt nghiệp', 'Nợ học phí'
     note?: string;
     created_at?: string;
 }
 
 const TABLE_NAME = "students";
 
-// 1. Lấy danh sách học viên Real-time
+// 1. Lắng nghe danh sách học viên Real-time
 export const subscribeToStudents = (callback: (students: StudentData[]) => void) => {
     const fetchStudents = async () => {
         const { data, error } = await supabase
@@ -58,12 +58,12 @@ export const createStudent = async (data: Omit<StudentData, 'id' | 'created_at'>
         if (error) throw error;
         return insertedData[0].id;
     } catch (error) {
-        console.error("Lỗi khi tạo học viên:", error);
+        console.error("Lỗi createStudent:", error);
         throw error;
     }
 };
 
-// 3. Cập nhật thông tin học viên
+// 3. Cập nhật học viên
 export const updateStudent = async (id: string, data: Partial<StudentData>) => {
     try {
         const { error } = await supabase
@@ -74,12 +74,12 @@ export const updateStudent = async (id: string, data: Partial<StudentData>) => {
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Lỗi khi cập nhật học viên:", error);
+        console.error("Lỗi updateStudent:", error);
         throw error;
     }
 };
 
-// 4. Xóa hồ sơ học viên
+// 4. Xóa học viên
 export const deleteStudent = async (id: string) => {
     try {
         const { error } = await supabase
@@ -90,12 +90,12 @@ export const deleteStudent = async (id: string) => {
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Lỗi khi xóa học viên:", error);
+        console.error("Lỗi deleteStudent:", error);
         throw error;
     }
 };
 
-// 5. Lấy thông tin chi tiết một học viên theo ID
+// 5. Lấy 1 học viên theo ID
 export const getStudentById = async (id: string) => {
     try {
         const { data, error } = await supabase
