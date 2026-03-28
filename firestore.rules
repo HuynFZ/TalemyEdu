@@ -1,9 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      // Cho phép mọi người đọc và ghi dữ liệu (Tạm thời để test)
-      allow read, write: if true;
-    }
-  }
-}

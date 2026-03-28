@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, updateDoc, doc, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { ArrowLeft, User, UserCheck, Clock, CheckCircle2, XCircle, AlertCircle, Calendar, GraduationCap } from 'lucide-react';
 
 interface SessionManagementProps {

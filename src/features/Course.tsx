@@ -3,8 +3,6 @@ import {
     BookOpen, Users, Plus, MoreHorizontal,
     GraduationCap, Search, X, DollarSign, Clock, Layers, ChevronRight, User, Video
 } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, query, serverTimestamp, orderBy, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import ClassManagement from './ClassManagement';
 import { getStaffProfile } from '../services/staffService'; // Đảm bảo đã import hàm này

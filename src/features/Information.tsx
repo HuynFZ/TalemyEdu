@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStaffProfile } from '../services/staffService';
-import { db } from '../firebase';
-import {
-    doc, collection, addDoc, serverTimestamp,
-    query, where, getDocs, onSnapshot, getDoc
-} from 'firebase/firestore';
 import {
     User, Mail, Phone, MapPin, Calendar, Briefcase, Shield,
     CheckCircle2, Clock, Send, Lock, AlertCircle, Info, Key, Eye, EyeOff, Check, Fingerprint
