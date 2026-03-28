@@ -1,86 +1,132 @@
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+// --- FILE: src/services/leadService.ts ---
+import { supabase } from '../supabaseClient';
 
-// 1. Cập nhật Interface: Bỏ isTestSent, thêm đếm số lần và thời gian
+// 1. Định nghĩa Interface khớp với bảng 'leads' trong Database Supabase
 export interface LeadData {
-  id?: string;
-  name: string;
-  phone: string;
-  email?: string;
-  status: string; 
-  course: string;
-  source?: string;
-  note?: string;
-  create_at?: any;
-  testRemindCount?: number;     // Số lần đã gửi/nhắc lịch test
-  lastTestRemindedAt?: any;     // Thời gian nhắc gần nhất
+    id?: string;
+    name: string;
+    phone: string;
+    email?: string;
+    status: string;
+    course: string; // Tương ứng với cột course_interest hoặc tên khóa học
+    source?: string;
+    note?: string;
+    created_at?: any;
+    test_remind_count?: number;     // Số lần đã gửi/nhắc lịch test
+    last_test_reminded_at?: any;    // Thời gian nhắc gần nhất
 }
 
-const COLLECTION_NAME = "leads";
+const TABLE_NAME = "leads";
 
+// 2. Hàm lấy danh sách Leads Real-time
 export const subscribeToLeads = (callback: (leads: LeadData[]) => void) => {
-  const q = query(collection(db, COLLECTION_NAME), orderBy("create_at", "desc"));
-  return onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LeadData[];
-    callback(data);
-  });
+    // Lấy dữ liệu ban đầu
+    const fetchInitialLeads = async () => {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            callback(data as LeadData[]);
+        }
+    };
+
+    fetchInitialLeads();
+
+    // Thiết lập kênh Realtime để lắng nghe thay đổi (INSERT, UPDATE, DELETE)
+    const channel = supabase
+        .channel('public:leads')
+        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
+            fetchInitialLeads(); // Load lại toàn bộ danh sách khi có bất kỳ thay đổi nào
+        })
+        .subscribe();
+
+    return channel; // Trả về channel để có thể unsubscribe khi component unmount
 };
 
-export const createLead = async (leadData: Omit<LeadData, 'id' | 'create_at'>) => {
-  try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      ...leadData,
-      testRemindCount: 0,        // Mặc định lúc tạo mới là 0
-      lastTestRemindedAt: null,
-      create_at: serverTimestamp()
-    });
-    return docRef.id;
-  } catch (error) {
-    throw error;
-  }
+// 3. Hàm tạo Lead mới
+export const createLead = async (leadData: Omit<LeadData, 'id' | 'created_at'>) => {
+    try {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .insert([
+                {
+                    ...leadData,
+                    test_remind_count: 0,
+                    last_test_reminded_at: null,
+                    // created_at sẽ được Postgres tự động điền (DEFAULT NOW())
+                }
+            ])
+            .select();
+
+        if (error) throw error;
+        return data[0].id;
+    } catch (error) {
+        console.error("Lỗi khi tạo Lead:", error);
+        throw error;
+    }
 };
 
+// 4. Hàm cập nhật trạng thái Lead (Khi kéo thả Kanban)
 export const updateLeadStatus = async (leadId: string, newStatus: string) => {
-  try {
-    const leadRef = doc(db, COLLECTION_NAME, leadId);
-    await updateDoc(leadRef, { status: newStatus });
-  } catch (error) {
-    throw error;
-  }
+    try {
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .update({ status: newStatus })
+            .eq('id', leadId);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Lỗi khi cập nhật trạng thái Lead:", error);
+        throw error;
+    }
 };
 
-// Hàm xử lý khi bấm Gửi/Nhắc lịch Test
+// 5. Hàm xử lý khi bấm Gửi/Nhắc lịch Test
 export const sendTestSchedule = async (leadId: string, currentCount: number) => {
-  try {
-    const leadRef = doc(db, COLLECTION_NAME, leadId);
-    await updateDoc(leadRef, { 
-        testRemindCount: currentCount + 1,        // Tăng số lần nhắc lên 1
-        lastTestRemindedAt: serverTimestamp()     // Lưu thời gian hiện tại
-    });
-  } catch (error) {
-    console.error("Lỗi cập nhật test:", error);
-    throw error;
-  }
+    try {
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .update({
+                test_remind_count: (currentCount || 0) + 1,
+                last_test_reminded_at: new Date().toISOString()
+            })
+            .eq('id', leadId);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Lỗi cập nhật lịch test:", error);
+        throw error;
+    }
 };
 
-// Hàm cập nhật Lead
-export const updateLead = async (id: string, updateData: any) => {
-  try {
-    const leadRef = doc(db, "leads", id);
-    await updateDoc(leadRef, updateData);
-  } catch (error) {
-    console.error("Lỗi khi cập nhật lead:", error);
-    throw error;
-  }
+// 6. Hàm cập nhật thông tin Lead (Dùng trong Modal Sửa)
+export const updateLead = async (id: string, updateData: Partial<LeadData>) => {
+    try {
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .update(updateData)
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Lỗi khi cập nhật Lead:", error);
+        throw error;
+    }
 };
 
-// Hàm xóa Lead
+// 7. Hàm xóa Lead
 export const deleteLead = async (id: string) => {
-  try {
-    const leadRef = doc(db, "leads", id);
-    await deleteDoc(leadRef);
-  } catch (error) {
-    console.error("Lỗi khi xóa lead:", error);
-    throw error;
-  }
+    try {
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Lỗi khi xóa Lead:", error);
+        throw error;
+    }
 };

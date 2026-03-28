@@ -1,67 +1,112 @@
-import { db } from '../firebase';
-import { collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+// --- FILE: src/services/studentService.ts ---
+import { supabase } from '../supabaseClient';
 
 export interface StudentData {
     id?: string;
-    studentCode: string;   // Mã học viên
-    fullName: string;
+    student_code: string;   // Chuyển sang snake_case
+    full_name: string;      // Chuyển sang snake_case
     phone: string;
     email: string;
     cccd: string;
     address: string;
-    enrolledCourse: string; // Khóa đang học
-    classId: string;        // THÊM: ID của lớp học
-    className: string;      // THÊM: Tên của lớp học
-    totalFee: number;       // Tổng học phí
-    paidAmount: number;     // Đã thanh toán
+    enrolled_course?: string; // Khóa đang học (tương ứng với enrolledCourse)
+    class_id?: string;        // ID của lớp học
+    class_name?: string;      // Tên của lớp học
+    total_fee: number;       // Tổng học phí
+    paid_amount: number;     // Đã thanh toán
     status: 'CHỜ THANH TOÁN' | 'NỢ HỌC PHÍ' | 'ĐANG HỌC' | 'BẢO LƯU' | 'ĐÃ TỐT NGHIỆP';
     note?: string;
-    createdAt?: any;
+    created_at?: any;
 }
 
-const COLLECTION_NAME = "students";
+const TABLE_NAME = "students";
 
+// 1. Lấy danh sách học viên Real-time
 export const subscribeToStudents = (callback: (students: StudentData[]) => void) => {
-    const q = query(collection(db, COLLECTION_NAME));
-    return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as StudentData[];
-        callback(data);
-    });
+    const fetchStudents = async () => {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            callback(data as StudentData[]);
+        }
+    };
+
+    // Gọi lần đầu để lấy dữ liệu
+    fetchStudents();
+
+    // Lắng nghe thay đổi từ Database
+    const channel = supabase
+        .channel('public:students')
+        .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
+            fetchStudents();
+        })
+        .subscribe();
+
+    return channel;
 };
 
-export const createStudent = async (data: Omit<StudentData, 'id' | 'createdAt'>) => {
+// 2. Tạo hồ sơ học viên mới
+export const createStudent = async (data: Omit<StudentData, 'id' | 'created_at'>) => {
     try {
-        const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-            ...data,
-            createdAt: serverTimestamp()
-        });
-        return docRef.id;
-    } catch (error) { throw error; }
+        const { data: insertedData, error } = await supabase
+            .from(TABLE_NAME)
+            .insert([data])
+            .select();
+
+        if (error) throw error;
+        return insertedData[0].id;
+    } catch (error) {
+        console.error("Lỗi khi tạo học viên:", error);
+        throw error;
+    }
 };
 
+// 3. Cập nhật thông tin học viên
 export const updateStudent = async (id: string, data: Partial<StudentData>) => {
     try {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        await updateDoc(docRef, data);
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .update(data)
+            .eq('id', id);
+
+        if (error) throw error;
         return true;
-    } catch (error) { throw error; }
+    } catch (error) {
+        console.error("Lỗi khi cập nhật học viên:", error);
+        throw error;
+    }
 };
 
+// 4. Xóa hồ sơ học viên
 export const deleteStudent = async (id: string) => {
     try {
-        await deleteDoc(doc(db, COLLECTION_NAME, id));
+        const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
         return true;
-    } catch (error) { throw error; }
+    } catch (error) {
+        console.error("Lỗi khi xóa học viên:", error);
+        throw error;
+    }
 };
 
+// 5. Lấy thông tin chi tiết một học viên theo ID
 export const getStudentById = async (id: string) => {
     try {
-        const docRef = doc(db, COLLECTION_NAME, id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return { id: docSnap.id, ...docSnap.data() } as StudentData;
-        }
-        return null;
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+        return data as StudentData;
     } catch (error) {
         console.error("Lỗi lấy thông tin học viên:", error);
         return null;
