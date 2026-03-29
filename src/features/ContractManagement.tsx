@@ -290,6 +290,10 @@ const ContractManagement = () => {
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase whitespace-nowrap">Mã HĐ</th>
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase whitespace-nowrap">Học Viên</th>
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase min-w-[150px]">Khóa Học</th>
+                                {/* 2 CỘT MỚI ĐƯỢC THÊM VÀO ĐÂY */}
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase text-right whitespace-nowrap">Tổng Phí</th>
+                                <th className="p-5 text-xs font-black text-slate-400 uppercase text-right whitespace-nowrap">Đã Thu</th>
+                                
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase whitespace-nowrap">Ngày Tạo</th>
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase whitespace-nowrap">Trạng Thái</th>
                                 <th className="p-5 text-xs font-black text-slate-400 uppercase text-center whitespace-nowrap">Gửi Hợp Đồng</th>
@@ -298,7 +302,7 @@ const ContractManagement = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {filteredContracts.length === 0 ? (
-                                <tr><td colSpan={7} className="p-12 text-center">
+                                <tr><td colSpan={9} className="p-12 text-center">
                                     <div className="flex flex-col items-center justify-center opacity-50">
                                         <FileText size={48} className="text-slate-400 mb-3" />
                                         <p className="text-slate-500 font-bold text-lg">Không tìm thấy hợp đồng nào</p>
@@ -314,8 +318,15 @@ const ContractManagement = () => {
                                         </td>
                                         <td className="p-5 font-bold text-slate-700 text-sm">
                                             <p>{contract.course_name}</p>
-                                            <p className="text-xs text-orange-600 font-black mt-1">{(contract.total_fee || 0).toLocaleString('vi-VN')} đ</p>
                                         </td>
+                                        {/* DỮ LIỆU CỦA 2 CỘT MỚI */}
+                                        <td className="p-5 text-right font-black text-slate-800 whitespace-nowrap">
+                                            {(contract.total_fee || 0).toLocaleString('vi-VN')} đ
+                                        </td>
+                                        <td className="p-5 text-right font-black text-emerald-600 whitespace-nowrap">
+                                            {(contract.paid_amount || 0).toLocaleString('vi-VN')} đ
+                                        </td>
+                                        
                                         <td className="p-5 font-bold text-slate-500 text-sm whitespace-nowrap">
                                             {displayDate(contract.created_at)}
                                         </td>

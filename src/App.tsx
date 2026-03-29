@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import {
     LayoutDashboard, CreditCard, GraduationCap, BarChart3, LogOut,
     Menu, X, Users as UsersIcon, UserCircle, FileText, BookUser, UserCheck,
-    CalendarDays // 1. Đã thêm icon này
+    CalendarDays 
 } from 'lucide-react';
 
 import { AuthProvider, useAuth, Role } from './context/AuthContext';
@@ -15,9 +15,10 @@ import Course from './features/Course';
 import StaffManagement from './features/StaffManagement';
 import Information from './features/Information';
 import ContractManagement from './features/ContractManagement';
+import FinanceContractManagement from './features/FinanceContractManagement'; // <-- Đã sửa lại tên import chuẩn cho Kế toán
 import TeacherManagement from './features/TeacherManagement';
 import StudentManagement from './features/StudentManagement';
-import TeacherCalendar from './features/TeacherCalendar'; // 2. Đã import component này
+import TeacherCalendar from './features/TeacherCalendar'; 
 import PublicBooking from './features/PublicBooking';
 
 interface MenuItem {
@@ -29,7 +30,6 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
     { id: 'dashboard', label: 'Bảng điều khiển', icon: <LayoutDashboard size={20} />, roles: ['admin', 'finance', 'teacher', 'pt', 'sale'] },
-
     { id: 'pipeline', label: 'Quy trình tư vấn', icon: <BarChart3 size={20} />, roles: ['admin', 'sale'] },
     { id: 'contract', label: 'Hợp đồng', icon: <FileText size={20} />, roles: ['admin', 'sale', 'finance'] },
     { id: 'course', label: 'Khóa học', icon: <GraduationCap size={20} />, roles: ['admin', 'teacher', 'pt'] },
@@ -59,7 +59,10 @@ function MainLayout() {
             case 'finance': return <Finance />;
             case 'course': return <Course />;
             case 'pipeline': return <LeadManagement />;
-            case 'contract': return <ContractManagement />;
+            case 'contract': 
+                // Nếu là finance (kế toán) -> Trả về giao diện Dashboard Kế toán. Còn lại Admin và Sale dùng chung giao diện ContractManagement
+                if (user.role === 'finance') return <FinanceContractManagement />;
+                return <ContractManagement />;
             case 'teacher': return <TeacherManagement />;
             case 'student': return <StudentManagement />;
             default: return <Dashboard />;
