@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Search, Plus, X, Phone, Mail, MapPin, Briefcase, FileText,
     CheckCircle2, XCircle, AlertCircle, ChevronRight, User, Lock,
-    CreditCard, UserPlus, Trash2
+    CreditCard, UserPlus, Trash2, Edit // Đã thêm Edit
 } from 'lucide-react';
 import {
     subscribeToStaffByPosition,
@@ -217,43 +217,94 @@ const TeacherManagement = () => {
                 </button>
             </div>
 
-            {/* --- PHẦN 3: DANH SÁCH THẺ --- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredTeachers.map(teacher => (
-                    <div
-                        key={teacher.id}
-                        onClick={() => handleOpenEdit(teacher)}
-                        className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-xl transition-all duration-300 group flex flex-col"
-                    >
-                        <div className="flex items-start gap-4 mb-6">
-                            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-2xl shadow-inner border border-blue-100 shrink-0 group-hover:scale-105 transition-transform uppercase">
-                                {teacher.name?.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h3 className="font-black text-slate-800 text-lg leading-tight truncate group-hover:text-blue-600 transition-colors">{teacher.name}</h3>
-                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Briefcase size={12}/> Giảng Viên</p>
-                                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded-lg border ${teacher.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                        {teacher.status === 'active' ? 'Đang dạy' : 'Tạm nghỉ'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="space-y-3 pt-5 border-t border-slate-50">
-                            <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
-                                <Phone size={14} className="text-slate-400"/>
-                                <span className="font-bold">{teacher.phone || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
-                                <Mail size={14} className="text-slate-400"/>
-                                <span className="truncate">{teacher.email}</span>
-                            </div>
-                        </div>
-                    </div>
-                ))}
+            {/* --- PHẦN 3: DANH SÁCH DẠNG BẢNG (TABLE) --- */}
+            <div className="bg-white border border-slate-100 rounded-3xl shadow-sm overflow-hidden flex-1">
+                <div className="overflow-x-auto h-full">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50 text-slate-500 text-[11px] uppercase tracking-wider font-black border-b border-slate-100">
+                                <th className="p-5 whitespace-nowrap">Giảng viên</th>
+                                <th className="p-5 whitespace-nowrap">Thông tin liên hệ</th>
+                                <th className="p-5 whitespace-nowrap">CCCD / Ngày nhận việc</th>
+                                <th className="p-5 whitespace-nowrap text-center">Trạng thái</th>
+                                <th className="p-5 whitespace-nowrap text-center">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {filteredTeachers.map(teacher => (
+                                <tr key={teacher.id} className="hover:bg-slate-50/50 transition-colors group">
+                                    <td className="p-5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl shadow-inner border border-blue-100 shrink-0 uppercase">
+                                                {teacher.name?.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-slate-800 text-sm leading-tight group-hover:text-blue-600 transition-colors">
+                                                    {teacher.name}
+                                                </h3>
+                                                <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                                    <Briefcase size={10}/> Giảng Viên
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    
+                                    <td className="p-5">
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                                                <Phone size={14} className="text-slate-400 shrink-0"/>
+                                                <span className="font-bold">{teacher.phone || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
+                                                <Mail size={14} className="text-slate-400 shrink-0"/>
+                                                <span className="truncate max-w-[200px]" title={teacher.email}>{teacher.email}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td className="p-5">
+                                        <div className="space-y-1.5">
+                                            <div className="text-sm font-bold text-slate-700">
+                                                {teacher.cccd || 'N/A'}
+                                            </div>
+                                            <div className="text-[11px] font-medium text-slate-400">
+                                                Bắt đầu: {teacher.hire_date ? new Date(teacher.hire_date).toLocaleDateString('vi-VN') : 'N/A'}
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td className="p-5 text-center align-middle">
+                                        <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border inline-flex items-center justify-center ${teacher.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                            {teacher.status === 'active' ? 'Đang dạy' : 'Tạm nghỉ'}
+                                        </span>
+                                    </td>
+
+                                    <td className="p-5 text-center align-middle">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <button 
+                                                onClick={() => handleOpenEdit(teacher)} 
+                                                className="p-2 text-blue-500 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-xl transition-all"
+                                                title="Sửa thông tin"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredTeachers.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="p-10 text-center text-slate-400 font-medium">
+                                        Không tìm thấy giảng viên nào phù hợp.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            {/* --- MODAL ADD/EDIT --- */}
+            {/* --- MODAL ADD/EDIT (GIỮ NGUYÊN) --- */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200">

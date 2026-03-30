@@ -1,8 +1,10 @@
 import { google } from 'googleapis';
 import nodemailer from 'nodemailer';
+import express from 'express'; // Thêm thư viện này
 
 const OAuth2 = google.auth.OAuth2;
 
+// HÀM XỬ LÝ CHÍNH (GIỮ NGUYÊN HOÀN TOÀN CỦA BẠN)
 export default async function handler(req, res) {
     // 1. Cấu hình CORS (Cho phép Frontend gọi vào)
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -91,4 +93,27 @@ export default async function handler(req, res) {
         console.error('Lỗi API gửi email:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
+}
+
+// =======================================================================
+// THÊM ĐOẠN NÀY ĐỂ TẠO SERVER MỞ CỔNG 5000 CHẠY TRÊN MÁY LOCAL
+// Khi đưa lên Vercel/Netlify, đoạn này sẽ tự động bị bỏ qua
+// =======================================================================
+if (process.argv[1] && process.argv[1].endsWith('send-contract.js')) {
+    import('dotenv').then((dotenv) => dotenv.config()); // Load .env file
+    const app = express();
+    
+    // Cấp quyền nhận file Word dung lượng lớn (Rất quan trọng)
+    app.use(express.json({ limit: '20mb' })); 
+    
+    // Định tuyến gọi thẳng vào hàm handler của bạn
+    app.all('/api/send-contract', (req, res) => {
+        return handler(req, res);
+    });
+
+    const PORT = 5000;
+    app.listen(PORT, () => {
+        console.log(`\n🚀 LOCAL BACKEND IS RUNNING!`);
+        console.log(`📡 Sẵn sàng nhận email tại: http://127.0.0.1:${PORT}/api/send-contract\n`);
+    });
 }

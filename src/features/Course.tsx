@@ -30,7 +30,7 @@ const Course = () => {
     const [selectedCourse, setSelectedCourse] = useState<{id: string, name: string} | null>(null);
     const [loading, setLoading] = useState(true);
 
-    // Form tạo khóa học (Đã giữ lại Type chuẩn từ nhánh mới pull về)
+    // Form tạo khóa học
     const [newCourse, setNewCourse] = useState<Omit<CourseData, 'id' | 'created_at'>>({
         name: '',
         description: '',
@@ -177,51 +177,91 @@ const Course = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {user?.role === 'admin' ? (
-                    courses.filter(c => (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())).map((course) => (
-                        <div key={course.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-md transition-all group">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner border border-blue-100 uppercase font-black text-2xl">
-                                    {(course.name || 'C').charAt(0)}
-                                </div>
-                                <button className="text-slate-300 hover:text-slate-500"><MoreHorizontal size={20} /></button>
-                            </div>
-                            <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">{course.name || 'Khóa học chưa có tên'}</h3>
-                            <p className="text-slate-500 text-sm mb-4 line-clamp-2 italic">{course.description || 'Chưa có mô tả'}</p>
-                            <div className="grid grid-cols-2 gap-y-3 mb-6 border-b border-slate-50 pb-6">
-                                <InfoBadge icon={<Layers size={14}/>} label="Cấp độ" value={course.level || 'Chưa rõ'} />
-                                <InfoBadge icon={<Clock size={14}/>} label="Thời lượng" value={`${course.duration || 0} buổi`} />
-                                <InfoBadge icon={<DollarSign size={14}/>} label="Học phí" value={`${(course.price || 0).toLocaleString('vi-VN')}đ`} />
-                                <InfoBadge icon={<Users size={14}/>} label="Trạng thái" value={course.status || 'Đang mở'} />
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest border rounded-lg ${course.status === 'active' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
-                                    {course.status || 'UNKNOWN'}
-                                </span>
-                                <button onClick={() => setSelectedCourse({ id: course.id!, name: course.name || '' })} className="text-orange-600 font-black text-sm flex items-center gap-1 hover:gap-2 transition-all">Quản lý danh sách Lớp →</button>
-                            </div>
-                        </div>
-                    ))
-                ) : (
-                    teacherClasses.map((cls) => (
-                        <div key={cls.id} className="bg-white p-7 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl transition-all group relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className="w-14 h-14 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg"><GraduationCap size={28} /></div>
-                                <div className="px-3 py-1 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tighter border border-orange-100">LỚP CỦA BẠN</div>
-                            </div>
-                            <h3 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight italic">{cls.className}</h3>
-                            <p className="text-slate-400 text-xs font-bold mb-6 flex items-center gap-1"><Clock size={12}/> Ngày khai giảng: {cls.startDate}</p>
-                            <div className="grid grid-cols-2 gap-y-4 mb-8 border-y border-slate-50 py-6">
-                                <InfoBadge icon={<User size={14}/>} label="Học viên" value={cls.studentName} />
-                                <InfoBadge icon={<Clock size={14}/>} label="Tổng buổi" value={`${cls.totalSessions} buổi`} />
-                                <InfoBadge icon={<Video size={14}/>} label="Phòng học" value="Zoom Online" />
-                                <InfoBadge icon={<Layers size={14}/>} label="Tiến độ" value={cls.status} />
-                            </div>
-                            <button onClick={() => setSelectedCourse({ id: cls.id, name: cls.className })} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-orange-500 transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs shadow-lg active:scale-95">Vào điểm danh & Xem lộ trình <ChevronRight size={18}/></button>
-                        </div>
-                    ))
-                )}
+            {/* PHẦN HIỂN THỊ DẠNG BẢNG (TABLE) MỚI */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                                <th className="p-4 px-6">{user?.role === 'admin' ? 'Khóa Học & Mô Tả' : 'Lớp Học'}</th>
+                                <th className="p-4">{user?.role === 'admin' ? 'Cấp Độ' : 'Học Viên'}</th>
+                                <th className="p-4">Thời Lượng</th>
+                                <th className="p-4">{user?.role === 'admin' ? 'Học Phí' : 'Nền Tảng'}</th>
+                                <th className="p-4">Trạng Thái</th>
+                                <th className="p-4 text-right">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {user?.role === 'admin' ? (
+                                /* DATA CỦA ADMIN (KHÓA HỌC) */
+                                courses.filter(c => (c.name || '').toLowerCase().includes((searchTerm || '').toLowerCase())).map((course) => (
+                                    <tr key={course.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="p-4 px-6 max-w-xs">
+                                            <div className="font-bold text-slate-800 text-base">{course.name || 'Khóa học chưa có tên'}</div>
+                                            <div className="text-xs text-slate-500 line-clamp-1 mt-1 italic">{course.description || 'Chưa có mô tả'}</div>
+                                        </td>
+                                        <td className="p-4 text-sm font-medium text-slate-700">
+                                            <span className="flex items-center gap-1.5"><Layers size={14} className="text-slate-400"/> {course.level || 'Chưa rõ'}</span>
+                                        </td>
+                                        <td className="p-4 text-sm font-medium text-slate-700">
+                                            <span className="flex items-center gap-1.5"><Clock size={14} className="text-slate-400"/> {course.duration || 0} buổi</span>
+                                        </td>
+                                        <td className="p-4 text-sm font-bold text-orange-600">
+                                            {(course.price || 0).toLocaleString('vi-VN')}đ
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest border rounded-lg inline-block ${course.status === 'active' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>
+                                                {course.status || 'UNKNOWN'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button onClick={() => setSelectedCourse({ id: course.id!, name: course.name || '' })} className="text-orange-600 font-bold text-sm flex items-center justify-end gap-1 ml-auto hover:text-orange-700 transition-all hover:gap-2">
+                                                Quản lý lớp <ChevronRight size={16} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                /* DATA CỦA GIẢNG VIÊN (LỚP HỌC) */
+                                teacherClasses.map((cls) => (
+                                    <tr key={cls.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="p-4 px-6 max-w-xs">
+                                            <div className="font-bold text-slate-800 text-base uppercase italic">{cls.className}</div>
+                                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-1"><Clock size={12}/> Khai giảng: {cls.startDate}</div>
+                                        </td>
+                                        <td className="p-4 text-sm font-medium text-slate-700">
+                                            <span className="flex items-center gap-1.5"><User size={14} className="text-slate-400"/> {cls.studentName}</span>
+                                        </td>
+                                        <td className="p-4 text-sm font-medium text-slate-700">
+                                            {cls.totalSessions} buổi
+                                        </td>
+                                        <td className="p-4 text-sm font-medium text-slate-700">
+                                            <span className="flex items-center gap-1.5"><Video size={14} className="text-slate-400"/> Zoom Online</span>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className="px-3 py-1 text-[10px] font-black uppercase tracking-widest border rounded-lg bg-blue-50 text-blue-600 border-blue-100 inline-block">
+                                                {cls.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button onClick={() => setSelectedCourse({ id: cls.id, name: cls.className })} className="bg-slate-900 text-white font-bold text-xs px-4 py-2 rounded-xl hover:bg-orange-500 transition-all active:scale-95 inline-flex items-center gap-1">
+                                                Vào lớp <ChevronRight size={14} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                    
+                    {/* Thông báo khi không có dữ liệu */}
+                    {user?.role === 'admin' && courses.length === 0 && (
+                        <div className="p-8 text-center text-slate-500 italic">Chưa có khóa học nào. Hãy tạo khóa học mới!</div>
+                    )}
+                    {user?.role === 'teacher' && teacherClasses.length === 0 && (
+                        <div className="p-8 text-center text-slate-500 italic">Bạn chưa được phân công giảng dạy lớp nào.</div>
+                    )}
+                </div>
             </div>
 
             {/* MODAL TẠO KHÓA HỌC */}

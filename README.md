@@ -86,6 +86,11 @@ npm install html2pdf.js
 npm install dotenv
 ```
 
+## 16. Cài đặt thư viện express
+```cmd
+npm install express
+```
+
 ## lưu ý trước khi chạy thì hãy bật server nodejs để có thể gửi được mail qua SMTP
 ```cmd
 node server.js
