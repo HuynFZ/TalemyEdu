@@ -141,48 +141,42 @@ const TeacherCalendar = () => {
         if (isModalOpen) {
             prevStartTimeRef.current = startTime;
         }
-    }, [isModalOpen, editingSession]);
+    }, [isModalOpen]);
 
 // Tự động cập nhật endTime khi startTime hoặc focusType thay đổi
+// Khi thay đổi giờ bắt đầu trên giao diện
     useEffect(() => {
-        if (!startTime || !endTime) return;
+        // Luôn cho chạy, kể cả khi đang editingSession
+        if (!isModalOpen || !startTime || !endTime) return;
 
-        const sMins = timeToMins(startTime);
-        const prevSMins = timeToMins(prevStartTimeRef.current);
-        const eMins = timeToMins(endTime, true);
-        const minReq = focusType === 'Speaking' ? 40 : 20;
-
-        // Nếu giờ bắt đầu thay đổi (tiến hoặc lùi)
         if (startTime !== prevStartTimeRef.current) {
-            const diff = sMins - prevSMins; // Tính độ chênh lệch (âm nếu lùi, dương nếu tiến)
-            let newEMins = eMins + diff;
+            const sMins = timeToMins(startTime);
+            const minReq = focusType === 'Speaking' ? 40 : 20;
 
-            // Đảm bảo sau khi trượt, thời gian kết thúc không vi phạm minReq
-            if (newEMins < sMins + minReq) {
-                newEMins = sMins + minReq;
-            }
-
+            // Ép giờ kết thúc = giờ bắt đầu + mức tối thiểu của loại hình đang chọn
+            const newEMins = sMins + minReq;
             const newH = Math.floor(newEMins / 60) % 24;
             const newM = newEMins % 60;
-            setEndTime(`${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
 
-            // Cập nhật lại Ref để tính cho lần thay đổi sau
+            setEndTime(`${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
             prevStartTimeRef.current = startTime;
         }
-    }, [startTime]);
+    }, [startTime, isModalOpen, focusType]);
 
     useEffect(() => {
+        // Xóa bỏ chặn editingSession để khi sửa vẫn nhảy giờ theo Min
+        if (!isModalOpen || !startTime) return;
+
         const sMins = timeToMins(startTime);
-        const eMins = timeToMins(endTime, true);
         const minReq = focusType === 'Speaking' ? 40 : 20;
 
-        if (eMins < sMins + minReq) {
-            const total = sMins + minReq;
-            const newH = Math.floor(total / 60) % 24;
-            const newM = total % 60;
-            setEndTime(`${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
-        }
-    }, [focusType]);
+        // Luôn ép giờ kết thúc về mức tối thiểu mới ngay khi bấm nút
+        const total = sMins + minReq;
+        const newH = Math.floor(total / 60) % 24;
+        const newM = total % 60;
+
+        setEndTime(`${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
+    }, [focusType, isModalOpen]);
 
     useEffect(() => {
         if (formClassId && bookingType === 'class') {
@@ -271,12 +265,23 @@ const TeacherCalendar = () => {
             const c = hour * 60;
             return c >= s && c < e;
         });
+        const start = `${String(hour).padStart(2, '0')}:00`;
+        const minDuration = focusType === 'Speaking' ? 40 : 20;
+
+        // Tính giờ kết thúc mặc định
+        const total = hour * 60 + minDuration;
+        const end = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
         if (!isClickable) return;
         if (isPastDateTime(dateStr, `${String(hour).padStart(2, '0')}:00`)) return alert("Không thể thêm vào quá khứ!");
         setEditingSession(null);
         setBookingType('class');
-        setSelectedDate(dateStr);
-        setStartTime(`${String(hour).padStart(2, '0')}:00`);
+        setSelectedDate(toDateString(date));
+        setStartTime(start);
+        setEndTime(end);
+
+        // QUAN TRỌNG: Cập nhật Ref ngay tại đây
+        prevStartTimeRef.current = start;
+
         setFormClassId('');
         setFormLeadId('');
         setRepeatMode('none');
@@ -285,6 +290,7 @@ const TeacherCalendar = () => {
 
     const handleEditSession = (session: any) => {
         if (isPastDateTime(session.date, session.start_time)) return alert("Buổi học đã diễn ra!");
+        const start = session.start_time.slice(0, 5);
         setEditingSession(session);
         setBookingType(session.lead_id ? 'lead' : 'class');
         setFormClassId(session.class_id || '');
@@ -293,6 +299,7 @@ const TeacherCalendar = () => {
         setStartTime(session.start_time.slice(0, 5));
         setEndTime(session.end_time.slice(0, 5));
         setFocusType(session.focus_type || 'Writing');
+        prevStartTimeRef.current = start;
         setIsModalOpen(true);
     };
 
@@ -692,6 +699,7 @@ const TeacherCalendar = () => {
                                             const eMins = timeToMins(e.target.value, true);
                                             const minReq = focusType === 'Speaking' ? 40 : 20;
 
+                                            // Nếu người dùng tự chỉnh giờ kết thúc quá ngắn so với quy định
                                             if (eMins < sMins + minReq) {
                                                 const total = sMins + minReq;
                                                 const newH = Math.floor(total / 60) % 24;
