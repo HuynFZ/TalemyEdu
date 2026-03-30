@@ -1,10 +1,10 @@
 // --- FILE: src/pages/FinanceContractManagement.tsx ---
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, FileText, Eye, Download, Trash2, CheckCircle, Clock, XCircle, FileSignature, X, Send, User, BookOpen, CreditCard, Calendar, TrendingUp, AlertCircle, Wallet, Receipt, History, Plus, QrCode, MessageCircle } from 'lucide-react'; 
+import { Search, Filter, FileText, Eye, Download, Trash2, CheckCircle, Clock, XCircle, FileSignature, X, Send, User, BookOpen, CreditCard, Calendar, TrendingUp, AlertCircle, Wallet, Receipt, History, Plus, QrCode, MessageCircle, Loader2 } from 'lucide-react'; 
 import { subscribeToContracts, ContractData, updateContractStatus, deleteContract } from '../services/contractService';
 import { getStudentById } from '../services/studentService';
 import { getTransactionsByContractId, createTransactionAndUpdateContract, TransactionData } from '../services/transactionService';
-
+import { confirmTransactionSuccess } from '../services/transactionService'; 
 // IMPORT THƯ VIỆN XUẤT WORD
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
@@ -16,7 +16,8 @@ import { saveAs } from 'file-saver';
 const BANK_CONFIG = {
     BANK_ID: 'BIDV', // Mã ngân hàng (VD: MB, VCB, TCB, ACB...)
     ACCOUNT_NO: '8890098771', // Số tài khoản
-    ACCOUNT_NAME: 'TRUNG TAM DAO TAO ANH NGU TALEMY' // Tên chủ tài khoản (viết không dấu)
+    ACCOUNT_NAME: 'TRUNG TAM DAO TAO ANH NGU TALEMY', // Tên chủ tài khoản (viết không dấu)
+    TEMPLATE: 'compact2' // Giao diện QR
 };
 
 const FinanceContractManagement = () => {
@@ -30,10 +31,13 @@ const FinanceContractManagement = () => {
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
     const [selectedContract, setSelectedContract] = useState<ContractData | null>(null);
 
-    // --- STATE CHO MODAL LẬP PHIẾU THU (MỚI) ---
+    // --- STATE CHO MODAL LẬP PHIẾU THU (NÂNG CẤP LUỒNG 3 BƯỚC) ---
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     const [transactions, setTransactions] = useState<TransactionData[]>([]);
-    const [isAddingTx, setIsAddingTx] = useState(false);
+    
+    // Bước 0: Chưa làm gì | Bước 1: Form nhập số tiền | Bước 2: Hiện QR chờ thanh toán
+    const [addingStep, setAddingStep] = useState<0 | 1 | 2>(0);
+    
     const [newTxAmount, setNewTxAmount] = useState('');
     const [newTxMethod, setNewTxMethod] = useState('CHUYEN_KHOAN');
     const [newTxNote, setNewTxNote] = useState('');
@@ -132,7 +136,7 @@ const FinanceContractManagement = () => {
     const handleOpenReceiptModal = async (contract: ContractData) => {
         setSelectedContract(contract);
         setIsReceiptModalOpen(true);
-        setIsAddingTx(false); 
+        setAddingStep(0); 
         setNewTxAmount('');
         
         try {
@@ -143,15 +147,15 @@ const FinanceContractManagement = () => {
         }
     };
 
-    // --- HÀM BẮT ĐẦU LẬP PHIẾU (ĐỂ TỰ ĐỘNG GEN MÃ VÀ QR) ---
+    // --- HÀM BẮT ĐẦU LẬP PHIẾU (ĐỂ TỰ ĐỘNG GEN MÃ VÀ BẬT FORM) ---
     const handleStartAddingTx = () => {
         if (!selectedContract) return;
         const debt = selectedContract.total_fee - (selectedContract.paid_amount || 0);
-        const code = `PT${Math.floor(1000 + Math.random() * 9000)}`;
+        const code = `PT${Math.floor(10000 + Math.random() * 90000)}`; // Sinh mã 5 số
         setNewTxAmount(debt.toString());
         setTxCode(code);
         setNewTxNote(`Thu tien HD ${selectedContract.contract_code}`);
-        setIsAddingTx(true);
+        setAddingStep(1); // Mở form nhập tiền
     };
 
     // --- HÀM TẠO ẢNH VIETQR ---
@@ -167,12 +171,12 @@ const FinanceContractManagement = () => {
         let phone = selectedContract.student_phone || '';
         if (phone.startsWith('0')) phone = '84' + phone.slice(1);
 
-        const msg = `Chào ${selectedContract.student_name}, trung tâm gửi bạn mã QR thanh toán.\n- Số tiền: ${formatCurrency(Number(newTxAmount || 0))}\n- Nội dung chuyển khoản: ${txCode}\n\nBạn lưu ảnh QR lại và quét bằng App Ngân hàng nhé!`;
+        const msg = `Chào ${selectedContract.student_name}, trung tâm gửi bạn thông tin thanh toán.\n- Số tiền: ${formatCurrency(Number(newTxAmount || 0))}\n- Nội dung chuyển khoản: ${txCode}\n\nBạn lưu ảnh QR lại và quét bằng App Ngân hàng nhé!`;
         window.open(`https://zalo.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
     };
 
-    // --- XỬ LÝ LƯU PHIẾU THU ---
-    const handleSaveTransaction = async () => {
+    // --- XỬ LÝ LƯU PHIẾU THU (CHỜ HOẶC THÀNH CÔNG) ---
+    const handleCreateTransaction = async () => {
         if (!newTxAmount || isNaN(Number(newTxAmount)) || Number(newTxAmount) <= 0) {
             alert("Vui lòng nhập số tiền hợp lệ!");
             return;
@@ -181,37 +185,45 @@ const FinanceContractManagement = () => {
 
         const debt = selectedContract.total_fee - (selectedContract.paid_amount || 0);
         if (Number(newTxAmount) > debt) {
-            alert(`Số tiền nhập vào (${formatCurrency(Number(newTxAmount))}) đang lớn hơn số tiền còn nợ (${formatCurrency(debt)}). Vui lòng kiểm tra lại!`);
+            alert(`Số tiền nhập vào đang lớn hơn số tiền còn nợ. Vui lòng kiểm tra lại!`);
             return;
         }
 
+        // Quyết định trạng thái dựa trên Hình thức
+        const finalStatus = newTxMethod === 'TIEN_MAT' ? 'THANH_CONG' : 'PENDING';
+        const finalNote = newTxNote.includes(txCode) ? newTxNote : `${newTxNote} (Mã: ${txCode})`;
+
         try {
-            const finalNote = newTxNote.includes(txCode) ? newTxNote : `${newTxNote} (Mã: ${txCode})`;
             const newTx: TransactionData = {
                 contract_id: selectedContract.id!,
                 amount: Number(newTxAmount),
                 payment_method: newTxMethod,
-                note: finalNote
+                note: finalNote,
+                status: finalStatus // Backend sẽ tự quyết định có cộng tiền HĐ không dựa vào PENDING hay THANH_CONG
             };
 
             await createTransactionAndUpdateContract(newTx, selectedContract.paid_amount || 0);
-            alert("Lưu phiếu thu thành công!");
             
-            // Reload lại lịch sử
+            // Reload lại lịch sử để thấy phiếu vừa tạo
             const txs = await getTransactionsByContractId(selectedContract.id!);
             setTransactions(txs);
             
-            // Cập nhật lại UI tạm thời
-            setSelectedContract({
-                ...selectedContract,
-                paid_amount: (selectedContract.paid_amount || 0) + Number(newTxAmount)
-            });
-
-            setIsAddingTx(false);
-            setNewTxAmount('');
-            setNewTxNote('');
+            if (newTxMethod === 'TIEN_MAT') {
+                alert("Đã thu tiền mặt thành công!");
+                // Nếu tiền mặt, cập nhật UI tạm thời vì tiền đã vào két
+                setSelectedContract({
+                    ...selectedContract,
+                    paid_amount: (selectedContract.paid_amount || 0) + Number(newTxAmount)
+                });
+                setAddingStep(0);
+                setNewTxAmount('');
+                setNewTxNote('');
+            } else {
+                // Nếu chuyển khoản -> Chuyển sang Bước 2 (Hiện QR, Đợi Webhook)
+                setAddingStep(2);
+            }
         } catch (error) {
-            alert("Đã xảy ra lỗi khi lưu phiếu thu.");
+            alert("Đã xảy ra lỗi khi tạo phiếu thu.");
         }
     };
 
@@ -513,7 +525,7 @@ const FinanceContractManagement = () => {
                 </div>
             )}
 
-            {/* MODAL LẬP PHIẾU THU & XEM LỊCH SỬ THU (MỚI) */}
+            {/* MODAL LẬP PHIẾU THU & XEM LỊCH SỬ THU (NÂNG CẤP LUỒNG) */}
             {isReceiptModalOpen && selectedContract && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
@@ -555,40 +567,63 @@ const FinanceContractManagement = () => {
                                             <div className="text-center text-slate-400 py-10 font-medium text-sm italic">Chưa có giao dịch nào được ghi nhận.</div>
                                         ) : (
                                             transactions.map((tx, idx) => (
-                                                <div key={idx} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors">
+                                                <div key={idx} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${tx.status === 'PENDING' ? 'bg-yellow-50 border-yellow-100' : 'hover:bg-slate-50 border-slate-100'}`}>
                                                     <div>
-                                                        <p className="font-black text-emerald-600">{formatCurrency(tx.amount)}</p>
+                                                        <p className={`font-black ${tx.status === 'PENDING' ? 'text-yellow-600' : 'text-emerald-600'}`}>{formatCurrency(tx.amount)}</p>
                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">{new Date(tx.created_at || '').toLocaleString('vi-VN')} • {tx.payment_method}</p>
                                                         <p className="text-xs text-slate-600 mt-1">{tx.note}</p>
                                                     </div>
-                                                    <CheckCircle size={20} className="text-emerald-400" />
+                                                    {tx.status === 'PENDING' ? (
+                                                        <div className="flex flex-col items-end gap-2">
+                                                            <span className="flex items-center gap-1 text-[10px] font-bold text-yellow-600 bg-yellow-100 px-2 py-1 rounded-lg">
+                                                                <Loader2 size={12} className="animate-spin"/> ĐANG CHỜ TT
+                                                            </span>
+                                                            {/* THÊM NÚT XÁC NHẬN THỦ CÔNG */}
+                                                            <button 
+                                                                onClick={async () => {
+                                                                    if(window.confirm(`Xác nhận đã nhận ${formatCurrency(tx.amount)} cho phiếu này?`)) {
+                                                                        await confirmTransactionSuccess(tx, selectedContract.paid_amount || 0);
+                                                                        // Load lại dữ liệu để cập nhật UI
+                                                                        const newTxs = await getTransactionsByContractId(selectedContract.id!);
+                                                                        setTransactions(newTxs);
+                                                                        setSelectedContract({...selectedContract, paid_amount: (selectedContract.paid_amount || 0) + tx.amount});
+                                                                    }
+                                                                }}
+                                                                className="text-[10px] font-bold bg-emerald-500 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 shadow-sm"
+                                                            >
+                                                                Đã nhận tiền
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <CheckCircle size={20} className="text-emerald-400" />
+                                                    )}
                                                 </div>
                                             ))
                                         )}
                                     </div>
                                 </div>
 
-                                {/* KHỐI 3: FORM LẬP PHIẾU THU MỚI & TẠO MÃ QR */}
+                                {/* KHỐI 3: FORM LẬP PHIẾU THU MỚI (CHIA 3 BƯỚC) */}
                                 <div>
                                     <div className="flex justify-between items-center mb-4">
                                         <h3 className="font-black text-slate-700 uppercase tracking-widest text-sm flex items-center gap-2"><Plus size={18} className="text-emerald-500"/> Lập phiếu thu</h3>
-                                        {!isAddingTx && (selectedContract.total_fee - (selectedContract.paid_amount || 0)) > 0 && (
+                                        {addingStep === 0 && (selectedContract.total_fee - (selectedContract.paid_amount || 0)) > 0 && (
                                             <button onClick={handleStartAddingTx} className="text-xs font-bold bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg hover:bg-emerald-200">Ghi nhận mới</button>
                                         )}
                                     </div>
                                     
-                                    {isAddingTx ? (
+                                    {addingStep === 1 && (
                                         <div className="bg-white border-2 border-emerald-500 rounded-2xl p-5 shadow-lg shadow-emerald-500/20 animate-in fade-in slide-in-from-top-4">
                                             <div className="space-y-4">
                                                 <div>
-                                                    <label className="text-xs font-bold text-slate-500 uppercase">Số tiền nhận (VNĐ) <span className="text-red-500">*</span></label>
-                                                    <input type="number" placeholder="VD: 5000000" className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl outline-none font-black text-emerald-700 text-lg" value={newTxAmount} onChange={(e) => setNewTxAmount(e.target.value)} />
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Số tiền yêu cầu (VNĐ)</label>
+                                                    <input type="number" className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl outline-none font-black text-emerald-700 text-lg" value={newTxAmount} onChange={(e) => setNewTxAmount(e.target.value)} />
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="text-[10px] font-bold text-slate-500 uppercase">Hình thức</label>
                                                         <select className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-700 text-sm cursor-pointer" value={newTxMethod} onChange={(e) => setNewTxMethod(e.target.value)}>
-                                                            <option value="CHUYEN_KHOAN">Chuyển khoản</option>
+                                                            <option value="CHUYEN_KHOAN">Chuyển khoản (Có QR)</option>
                                                             <option value="TIEN_MAT">Tiền mặt</option>
                                                         </select>
                                                     </div>
@@ -599,38 +634,39 @@ const FinanceContractManagement = () => {
                                                 </div>
                                                 <div>
                                                     <label className="text-xs font-bold text-slate-500 uppercase">Ghi chú (Tùy chọn)</label>
-                                                    <input type="text" placeholder="Ghi chú thêm..." className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-medium text-slate-700 text-sm" value={newTxNote} onChange={(e) => setNewTxNote(e.target.value)} />
+                                                    <input type="text" className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-medium text-slate-700 text-sm" value={newTxNote} onChange={(e) => setNewTxNote(e.target.value)} />
                                                 </div>
-
-                                                {/* HIỂN THỊ MÃ QR NẾU LÀ CHUYỂN KHOẢN VÀ CÓ SỐ TIỀN */}
-                                                {newTxMethod === 'CHUYEN_KHOAN' && Number(newTxAmount) > 0 && (
-                                                    <div className="mt-4 p-4 bg-slate-50 border border-dashed border-emerald-300 rounded-xl flex flex-col items-center justify-center text-center animate-in zoom-in duration-300">
-                                                        <p className="text-xs font-bold text-emerald-600 uppercase mb-3 flex items-center gap-1">
-                                                            <CreditCard size={14}/> Quét mã QR để thanh toán
-                                                        </p>
-                                                        <div className="bg-white p-2 rounded-xl shadow-sm border border-slate-100">
-                                                            <img 
-                                                                src={generateVietQRUrl()} 
-                                                                alt="Mã QR Thanh Toán" 
-                                                                className="w-40 h-40 object-contain"
-                                                            />
-                                                        </div>
-                                                        <p className="text-[11px] text-slate-500 mt-3 max-w-[80%]">
-                                                            Nội dung CK: <span className="font-bold text-slate-800 bg-slate-200 px-1 py-0.5 rounded">{txCode}</span>
-                                                        </p>
-                                                        <button onClick={handleSendZalo} className="mt-3 w-full bg-[#0068FF] hover:bg-[#0054cc] text-white py-2.5 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all">
-                                                            <MessageCircle size={16}/> Gửi Yêu Cầu Zalo
-                                                        </button>
-                                                    </div>
-                                                )}
                                                 
                                                 <div className="flex gap-2 pt-2 border-t border-slate-100">
-                                                    <button onClick={() => setIsAddingTx(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">Hủy</button>
-                                                    <button onClick={handleSaveTransaction} className="flex-1 py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 shadow-md">Xác nhận thu</button>
+                                                    <button onClick={() => setAddingStep(0)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">Hủy</button>
+                                                    <button onClick={handleCreateTransaction} className="flex-[2] py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 shadow-md">
+                                                        {newTxMethod === 'TIEN_MAT' ? 'Đã Thu Tiền' : 'Tạo Phiếu Yêu Cầu'}
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
-                                    ) : (
+                                    )}
+
+                                    {addingStep === 2 && (
+                                        <div className="bg-white border-2 border-blue-500 rounded-2xl p-5 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in w-full text-center">
+                                            <div className="bg-blue-50 text-blue-700 font-bold text-sm py-2 px-4 rounded-lg inline-flex items-center gap-2 mb-4">
+                                                <Clock size={16}/> Đang đợi học viên thanh toán...
+                                            </div>
+                                            <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm w-max mx-auto mb-3">
+                                                <img src={generateVietQRUrl()} alt="QR Code" className="w-40 h-40 object-contain" />
+                                            </div>
+                                            <p className="text-[12px] text-slate-500 px-4 mb-5">Đã tạo Phiếu thu <b>{txCode}</b> với số tiền <b>{formatCurrency(Number(newTxAmount))}</b>.</p>
+                                            
+                                            <button onClick={handleSendZalo} className="w-full bg-[#0068FF] hover:bg-[#0054cc] text-white py-3 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all">
+                                                <MessageCircle size={18}/> Mở Zalo & Gửi thông báo
+                                            </button>
+                                            <button onClick={() => setAddingStep(0)} className="mt-3 w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all text-sm">
+                                                Đóng cửa sổ
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {addingStep === 0 && (
                                         <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-8 flex flex-col items-center justify-center text-center h-[250px]">
                                             {(selectedContract.total_fee - (selectedContract.paid_amount || 0)) <= 0 ? (
                                                 <>
