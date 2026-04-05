@@ -233,21 +233,33 @@ const FinanceContractManagement = () => {
 
             if (result.success) {
                 const checkoutUrl = result.data.checkoutUrl;
-
-                // 3. Mở Zalo gửi link (Tạm thời dùng zalo.me vì chưa có OA)
                 let phone = selectedContract.student_phone || '';
                 if (phone.startsWith('0')) phone = '84' + phone.slice(1);
 
-                const msg = `🌟 [TALEMY] THÔNG BÁO THANH TOÁN\n` +
+                // 1. Tạo nội dung tin nhắn
+                const msg = `🌟 [TALEMY ENGLISH] THÔNG BÁO THANH TOÁN\n` +
                             `Chào ${selectedContract.student_name}, trung tâm gửi bạn link thanh toán học phí.\n` +
                             `💰 Số tiền: ${formatCurrency(Number(newTxAmount))}\n` +
-                            `🔗 Link: ${checkoutUrl}\n\n` +
-                            `Bạn bấm vào link để thanh toán nhanh qua App Bank nhé! Hệ thống sẽ tự cập nhật khi xong.`;
+                            `👉 Bấm vào link để lấy mã QR: ${checkoutUrl}\n\n` +
+                            `(Hệ thống sẽ tự động cập nhật khi bạn hoàn tất)`;
 
-                window.open(`https://zalo.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-                
-                // Mở cả link PayOS để kế toán xem thử
+                // 2. TỰ ĐỘNG COPY TIN NHẮN VÀO BỘ NHỚ (CLIPBOARD)
+                try {
+                    await navigator.clipboard.writeText(msg);
+                    // Bạn có thể thêm một cái thông báo nhỏ ở đây
+                    console.log("Đã copy tin nhắn vào bộ nhớ tạm");
+                } catch (err) {
+                    console.error("Không thể copy tin nhắn", err);
+                }
+
+                // 3. MỞ TRANG THANH TOÁN PAYOS CHO KẾ TOÁN XEM
                 window.open(checkoutUrl, '_blank');
+
+                // 4. MỞ ZALO (Lúc này App Zalo sẽ bật lên)
+                // Bạn có thể dùng link rút gọn này để App Zalo bắt nhanh hơn
+                window.open(`https://zalo.me/${phone}`, '_blank');
+                
+                alert("Đã copy tin nhắn! Hãy dán (Ctrl+V) vào Zalo học viên.");
             }
         }
 

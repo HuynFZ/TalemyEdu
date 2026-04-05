@@ -61,7 +61,10 @@ app.post('/api/create-payment-link', async (req, res) => {
 });
 
 // 4. API WEBHOOK (Xử lý khi học viên đóng tiền xong)
-app.post('/api/webhook/payos', async (req, res) => {
+app.all('/api/webhook/payos', async (req, res) => {
+    if (req.method === 'GET') {
+        return res.status(200).send("✅ Webhook Talemy đã sẵn sàng nhận tiền!");
+    }
     try {
         const { data } = req.body; // PayOS bắn dữ liệu về qua body.data
         if (data) {
