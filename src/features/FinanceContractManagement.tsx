@@ -5,14 +5,18 @@ import { subscribeToContracts, ContractData, updateContractStatus, deleteContrac
 import { getStudentById } from '../services/studentService';
 import { getTransactionsByContractId, createTransactionAndUpdateContract, TransactionData } from '../services/transactionService';
 import { confirmTransactionSuccess } from '../services/transactionService'; 
+// Thêm state này dưới dòng: const [txCode, setTxCode] = useState('');
 // IMPORT THƯ VIỆN XUẤT WORD
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { saveAs } from 'file-saver';
 
+import { supabase } from '../supabaseClient'; // Đảm bảo đường dẫn này đúng với project của bạn
 // ==========================================
 // CẤU HÌNH TÀI KHOẢN NGÂN HÀNG CỦA TRUNG TÂM
 // ==========================================
+
+
 const BANK_CONFIG = {
     BANK_ID: 'BIDV', // Mã ngân hàng (VD: MB, VCB, TCB, ACB...)
     ACCOUNT_NO: '8890098771', // Số tài khoản
@@ -41,6 +45,8 @@ const FinanceContractManagement = () => {
     const [newTxAmount, setNewTxAmount] = useState('');
     const [newTxMethod, setNewTxMethod] = useState('CHUYEN_KHOAN');
     const [newTxNote, setNewTxNote] = useState('');
+    // Thêm state này dưới dòng: const [txCode, setTxCode] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // State tạo mã QR
     const [txCode, setTxCode] = useState('');
@@ -175,57 +181,88 @@ const FinanceContractManagement = () => {
         window.open(`https://zalo.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
     };
 
-    // --- XỬ LÝ LƯU PHIẾU THU (CHỜ HOẶC THÀNH CÔNG) ---
-    const handleCreateTransaction = async () => {
-        if (!newTxAmount || isNaN(Number(newTxAmount)) || Number(newTxAmount) <= 0) {
-            alert("Vui lòng nhập số tiền hợp lệ!");
-            return;
-        }
-        if (!selectedContract) return;
+    const handleCreateAndSendZalo = async () => {
+    if (!newTxAmount || isNaN(Number(newTxAmount)) || Number(newTxAmount) <= 0) {
+        alert("Vui lòng nhập số tiền hợp lệ!");
+        return;
+    }
+    if (!selectedContract) return;
 
-        const debt = selectedContract.total_fee - (selectedContract.paid_amount || 0);
-        if (Number(newTxAmount) > debt) {
-            alert(`Số tiền nhập vào đang lớn hơn số tiền còn nợ. Vui lòng kiểm tra lại!`);
-            return;
-        }
+    setIsProcessing(true);
 
-        // Quyết định trạng thái dựa trên Hình thức
-        const finalStatus = newTxMethod === 'TIEN_MAT' ? 'THANH_CONG' : 'PENDING';
-        const finalNote = newTxNote.includes(txCode) ? newTxNote : `${newTxNote} (Mã: ${txCode})`;
-
-        try {
+    try {
+        if (newTxMethod === 'TIEN_MAT') {
+            // Giữ nguyên logic TIEN_MAT của bạn
             const newTx: TransactionData = {
                 contract_id: selectedContract.id!,
                 amount: Number(newTxAmount),
                 payment_method: newTxMethod,
-                note: finalNote,
-                status: finalStatus // Backend sẽ tự quyết định có cộng tiền HĐ không dựa vào PENDING hay THANH_CONG
+                note: newTxNote,
+                status: 'THANH_CONG' 
             };
-
             await createTransactionAndUpdateContract(newTx, selectedContract.paid_amount || 0);
-            
-            // Reload lại lịch sử để thấy phiếu vừa tạo
-            const txs = await getTransactionsByContractId(selectedContract.id!);
-            setTransactions(txs);
-            
-            if (newTxMethod === 'TIEN_MAT') {
-                alert("Đã thu tiền mặt thành công!");
-                // Nếu tiền mặt, cập nhật UI tạm thời vì tiền đã vào két
-                setSelectedContract({
-                    ...selectedContract,
-                    paid_amount: (selectedContract.paid_amount || 0) + Number(newTxAmount)
-                });
-                setAddingStep(0);
-                setNewTxAmount('');
-                setNewTxNote('');
-            } else {
-                // Nếu chuyển khoản -> Chuyển sang Bước 2 (Hiện QR, Đợi Webhook)
-                setAddingStep(2);
+            alert("Đã thu tiền mặt thành công!");
+        } else {
+            // 🚀 LUỒNG CHUYỂN KHOẢN PAYOS TỰ ĐỘNG
+            const numericOrderCode = Number(String(Date.now()).slice(-6));
+
+            // 1. Tạo bản ghi PENDING vào Supabase trước để Webhook có cái mà đối soát
+            const { error: insertErr } = await supabase.from('transactions').insert([{
+                contract_id: selectedContract.id!,
+                amount: Number(newTxAmount),
+                payment_method: 'CHUYEN_KHOAN',
+                note: newTxNote,
+                status: 'PENDING',
+                order_code: numericOrderCode
+            }]);
+
+            if (insertErr) throw insertErr;
+
+            // 2. Gọi Backend lấy link PayOS
+            const response = await fetch('http://localhost:3001/api/create-payment-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: Number(newTxAmount), // Đảm bảo là Number
+                    description: `HOC PHI ${numericOrderCode}`, // Không dấu, < 25 ký tự 
+                    orderCode: numericOrderCode
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                const checkoutUrl = result.data.checkoutUrl;
+
+                // 3. Mở Zalo gửi link (Tạm thời dùng zalo.me vì chưa có OA)
+                let phone = selectedContract.student_phone || '';
+                if (phone.startsWith('0')) phone = '84' + phone.slice(1);
+
+                const msg = `🌟 [TALEMY] THÔNG BÁO THANH TOÁN\n` +
+                            `Chào ${selectedContract.student_name}, trung tâm gửi bạn link thanh toán học phí.\n` +
+                            `💰 Số tiền: ${formatCurrency(Number(newTxAmount))}\n` +
+                            `🔗 Link: ${checkoutUrl}\n\n` +
+                            `Bạn bấm vào link để thanh toán nhanh qua App Bank nhé! Hệ thống sẽ tự cập nhật khi xong.`;
+
+                window.open(`https://zalo.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                
+                // Mở cả link PayOS để kế toán xem thử
+                window.open(checkoutUrl, '_blank');
             }
-        } catch (error) {
-            alert("Đã xảy ra lỗi khi tạo phiếu thu.");
         }
-    };
+
+        // Tải lại lịch sử giao dịch
+        const txs = await getTransactionsByContractId(selectedContract.id!);
+        setTransactions(txs);
+        setAddingStep(0);
+        
+    } catch (error) {
+        console.error('Lỗi luồng thanh toán:', error);
+        alert("Lỗi hệ thống, vui lòng kiểm tra console!");
+    } finally {
+        setIsProcessing(false);
+    }
+};
 
     // --- HÀM XUẤT WORD ---
     const handleExportWord = async (contract: ContractData) => {
@@ -528,7 +565,7 @@ const FinanceContractManagement = () => {
             {/* MODAL LẬP PHIẾU THU & XEM LỊCH SỬ THU (NÂNG CẤP LUỒNG) */}
             {isReceiptModalOpen && selectedContract && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-7xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
                         
                         <div className="bg-emerald-600 p-6 flex justify-between items-center text-white shrink-0">
                             <h2 className="text-2xl font-black flex items-center gap-3">
@@ -613,58 +650,108 @@ const FinanceContractManagement = () => {
                                     </div>
                                     
                                     {addingStep === 1 && (
-                                        <div className="bg-white border-2 border-emerald-500 rounded-2xl p-5 shadow-lg shadow-emerald-500/20 animate-in fade-in slide-in-from-top-4">
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-500 uppercase">Số tiền yêu cầu (VNĐ)</label>
-                                                    <input type="number" className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl outline-none font-black text-emerald-700 text-lg" value={newTxAmount} onChange={(e) => setNewTxAmount(e.target.value)} />
+                                        <div className="bg-white border-2 border-emerald-500 rounded-2xl p-6 shadow-xl shadow-emerald-500/10 animate-in fade-in slide-in-from-top-4 w-full">
+                                            {/* TIÊU ĐỀ BƯỚC */}
+                                            <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                                                <h4 className="font-black text-emerald-800 text-lg">Chi tiết phiếu thu mới</h4>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs font-bold text-slate-400 uppercase">Mã phiếu:</span>
+                                                    <input type="text" disabled className="px-4 py-1.5 bg-slate-100 rounded-lg text-slate-600 font-bold text-center text-sm w-max" value={txCode} />
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Hình thức</label>
-                                                        <select className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-700 text-sm cursor-pointer" value={newTxMethod} onChange={(e) => setNewTxMethod(e.target.value)}>
-                                                            <option value="CHUYEN_KHOAN">Chuyển khoản (Có QR)</option>
-                                                            <option value="TIEN_MAT">Tiền mặt</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase">Mã phiếu (Tự động)</label>
-                                                        <input type="text" disabled className="w-full mt-1 px-3 py-2 bg-slate-100 rounded-lg text-slate-500 font-bold text-center text-sm" value={txCode} />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-500 uppercase">Ghi chú (Tùy chọn)</label>
-                                                    <input type="text" className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-medium text-slate-700 text-sm" value={newTxNote} onChange={(e) => setNewTxNote(e.target.value)} />
-                                                </div>
+                                            </div>
+
+                                            {/* CHIA 2 CỘT: Cột trái (Form) rộng linh hoạt, Cột phải (QR) fix cứng 240px */}
+                                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-8">
                                                 
-                                                <div className="flex gap-2 pt-2 border-t border-slate-100">
-                                                    <button onClick={() => setAddingStep(0)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200">Hủy</button>
-                                                    <button onClick={handleCreateTransaction} className="flex-[2] py-3 bg-emerald-500 text-white font-black rounded-xl hover:bg-emerald-600 shadow-md">
-                                                        {newTxMethod === 'TIEN_MAT' ? 'Đã Thu Tiền' : 'Tạo Phiếu Yêu Cầu'}
-                                                    </button>
+                                                {/* CỘT TRÁI: FORM NHẬP LIỆU (Đã làm rộng và to hơn) */}
+                                                <div className="space-y-6">
+                                                    {/* Số tiền */}
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Số tiền yêu cầu (VNĐ)</label>
+                                                        <input 
+                                                            type="number" 
+                                                            className="w-full px-5 py-4 bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 rounded-xl outline-none font-black text-emerald-700 text-2xl transition-all" 
+                                                            value={newTxAmount} 
+                                                            onChange={(e) => setNewTxAmount(e.target.value)} 
+                                                            placeholder="0"
+                                                        />
+                                                    </div>
+                                                    
+                                                    {/* Hình thức & Kế toán */}
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Hình thức thanh toán</label>
+                                                            <select 
+                                                                className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-200 focus:border-blue-500 rounded-xl font-bold text-slate-700 text-sm cursor-pointer transition-all" 
+                                                                value={newTxMethod} 
+                                                                onChange={(e) => setNewTxMethod(e.target.value)}
+                                                            >
+                                                                <option value="CHUYEN_KHOAN">Chuyển khoản (Mã QR)</option>
+                                                                <option value="TIEN_MAT">Tiền mặt (Nhận trực tiếp)</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Người cập nhật</label>
+                                                            <input type="text" disabled className="w-full px-4 py-3 bg-slate-100 border border-transparent rounded-xl text-slate-500 font-bold text-sm" value="Kế toán viên" />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Ghi chú */}
+                                                    <div>
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Nội dung / Ghi chú (Tùy chọn)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 rounded-xl outline-none font-medium text-slate-700 text-sm transition-all" 
+                                                            value={newTxNote} 
+                                                            onChange={(e) => setNewTxNote(e.target.value)} 
+                                                            placeholder="Nhập nội dung thu tiền..."
+                                                        />
+                                                    </div>
                                                 </div>
+
+                                                {/* CỘT PHẢI: QR REAL-TIME (Tăng kích thước lên 240px) */}
+                                                {newTxMethod === 'CHUYEN_KHOAN' && (
+                                                    <div className="w-full lg:w-[240px] flex flex-col items-center justify-center bg-[#F8FAFC] border-2 border-blue-100 rounded-2xl p-5 shadow-sm">
+                                                        <p className="text-xs font-black text-blue-800 uppercase mb-3 text-center">Bản xem trước mã QR</p>
+                                                        <div className="bg-white p-2.5 rounded-xl shadow-md border border-slate-100 w-full aspect-square flex items-center justify-center">
+                                                            <img src={generateVietQRUrl()} alt="Mã QR thanh toán" className="max-w-full max-h-full object-contain" />
+                                                        </div>
+                                                        <div className="mt-4 text-center w-full">
+                                                            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mb-1">Số tiền cần thanh toán</p>
+                                                            <p className="text-lg text-blue-700 font-black">
+                                                                {formatCurrency(Number(newTxAmount || 0))}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            {/* NÚT ACTION (Làm to và nổi bật hơn) */}
+                                            <div className="flex flex-col sm:flex-row gap-3 pt-6 mt-6 border-t border-slate-100">
+                                                <button 
+                                                    onClick={() => setAddingStep(0)} 
+                                                    disabled={isProcessing} 
+                                                    className="w-full sm:w-auto px-8 py-3.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"
+                                                >
+                                                    Hủy bỏ
+                                                </button>
+                                                
+                                                <button 
+                                                    onClick={handleCreateAndSendZalo} 
+                                                    disabled={isProcessing}
+                                                    className={`flex-1 py-3.5 text-white font-black rounded-xl shadow-lg flex justify-center items-center gap-2.5 transition-all disabled:opacity-70 text-base ${newTxMethod === 'TIEN_MAT' ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30' : 'bg-[#0068FF] hover:bg-[#0054cc] shadow-blue-500/30'}`}
+                                                >
+                                                    {isProcessing ? (
+                                                        <Loader2 className="animate-spin" size={20} />
+                                                    ) : (
+                                                        <Send size={20} />
+                                                    )}
+                                                    {newTxMethod === 'TIEN_MAT' ? 'Lưu Phiếu Thu Tiền Mặt' : 'Tạo Phiếu & Tự Động Gửi Zalo'}
+                                                </button>
                                             </div>
                                         </div>
                                     )}
 
-                                    {addingStep === 2 && (
-                                        <div className="bg-white border-2 border-blue-500 rounded-2xl p-5 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in w-full text-center">
-                                            <div className="bg-blue-50 text-blue-700 font-bold text-sm py-2 px-4 rounded-lg inline-flex items-center gap-2 mb-4">
-                                                <Clock size={16}/> Đang đợi học viên thanh toán...
-                                            </div>
-                                            <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm w-max mx-auto mb-3">
-                                                <img src={generateVietQRUrl()} alt="QR Code" className="w-40 h-40 object-contain" />
-                                            </div>
-                                            <p className="text-[12px] text-slate-500 px-4 mb-5">Đã tạo Phiếu thu <b>{txCode}</b> với số tiền <b>{formatCurrency(Number(newTxAmount))}</b>.</p>
-                                            
-                                            <button onClick={handleSendZalo} className="w-full bg-[#0068FF] hover:bg-[#0054cc] text-white py-3 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 transition-all">
-                                                <MessageCircle size={18}/> Mở Zalo & Gửi thông báo
-                                            </button>
-                                            <button onClick={() => setAddingStep(0)} className="mt-3 w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all text-sm">
-                                                Đóng cửa sổ
-                                            </button>
-                                        </div>
-                                    )}
 
                                     {addingStep === 0 && (
                                         <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-8 flex flex-col items-center justify-center text-center h-[250px]">
