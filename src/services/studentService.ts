@@ -35,13 +35,17 @@ export const subscribeToStudents = (callback: (students: StudentData[]) => void)
 
     fetchStudents();
 
+    // SỬA TẠI ĐÂY: Thêm ID ngẫu nhiên vào tên channel
+    const uniqueChannelName = `students_changes_${Math.random().toString(36).substring(7)}`;
+
     const channel = supabase
-        .channel('public_students_changes')
+        .channel(uniqueChannelName) 
         .on('postgres_changes', { event: '*', schema: 'public', table: TABLE_NAME }, () => {
             fetchStudents();
         })
         .subscribe();
 
+    // Trả về hàm hủy để Component gọi khi unmount
     return () => {
         supabase.removeChannel(channel);
     };
