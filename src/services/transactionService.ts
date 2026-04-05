@@ -10,6 +10,7 @@ export interface TransactionData {
     note?: string;
     status?: string;
     created_at?: string;
+    order_code?: number;
 }
 
 // Lấy danh sách phiếu thu của 1 hợp đồng

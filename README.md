@@ -90,11 +90,22 @@ npm install dotenv
 ```cmd
 npm install express
 ```
+## 17. Cài đặt thư viện payOS
+```cmd
+npm install @payos/node
+```
+
+## 18. Cài đặt thư viện axios
+```cmd
+npm install axios
+```
 
 ## lưu ý trước khi chạy thì hãy bật server nodejs để có thể gửi được mail qua SMTP
 ```cmd
 node server.js
 ```
+
+
 
 # 🚀 Hướng dẫn thiết lập môi trường (Local Setup)
 
