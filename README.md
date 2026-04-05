@@ -71,33 +71,33 @@ docker-compose restart frontend
 
 ## 13. Tạo API Backend
 ```cmd
-npm init -y
-npm install express cors nodemailer
+docker-compose exec frontend npm init -y
+docker-compose exec frontend npm install express cors nodemailer
 ```
 
 
 ## 14. Cài đặt thư viện html2pdf
 ```cmd
-npm install html2pdf.js
+docker-compose exec frontend npm install html2pdf.js
 ```
 
 ## 15. Cài đặt thư viện dotenv
 ```cmd
-npm install dotenv
+docker-compose exec frontend npm install dotenv
 ```
 
 ## 16. Cài đặt thư viện express
 ```cmd
-npm install express
+docker-compose exec frontend npm install express
 ```
 ## 17. Cài đặt thư viện payOS
 ```cmd
-npm install @payos/node
+docker-compose exec frontend npm install @payos/node
 ```
 
 ## 18. Cài đặt thư viện axios
 ```cmd
-npm install axios
+docker-compose exec frontend npm install axios
 ```
 
 ## lưu ý trước khi chạy thì hãy bật server nodejs để có thể gửi được mail qua SMTP

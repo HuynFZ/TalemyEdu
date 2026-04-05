@@ -151,7 +151,11 @@ export const subscribeToStaffByPosition = (pos: string, callback: (data: any[]) 
         if (data) callback(data);
     };
     fetch();
-    return supabase.channel(`staffs_${pos}`)
+
+    // THÊM: Math.random() để tạo tên channel duy nhất mỗi lần gọi
+    const channelId = `staffs_${pos}_${Math.random().toString(36).substring(7)}`;
+
+    return supabase.channel(channelId)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, fetch)
         .subscribe();
 };
@@ -167,7 +171,11 @@ export const subscribeToStaffsFiltered = (excludeRoles: string[], callback: (dat
         if (data) callback(data);
     };
     fetch();
-    return supabase.channel('staffs_ops')
+
+    // THÊM: Math.random() để tạo tên channel duy nhất
+    const channelId = `staffs_ops_${Math.random().toString(36).substring(7)}`;
+
+    return supabase.channel(channelId)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'staffs' }, fetch)
         .subscribe();
 };
