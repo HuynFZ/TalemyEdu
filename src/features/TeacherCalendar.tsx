@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { gapi } from 'gapi-script';
 import {
     ChevronLeft, ChevronRight, Plus, Clock, User,
-    Video, Calendar as CalendarIcon, Info, Trash2, CheckCircle2, Loader2, X, Check, BookOpen, Repeat, Mic, PencilLine, Sunrise, Sunset, FlaskConical
+    Video, Calendar as CalendarIcon, Info, Trash2, CheckCircle2, Loader2, X, Check, BookOpen, Repeat, Mic, PencilLine, Sunrise, Sunset, FlaskConical, AlertTriangle
 } from 'lucide-react';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -16,6 +16,7 @@ const TeacherCalendar = () => {
     const { user } = useAuth();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const tokenClientRef = useRef<any>(null);
+    const [incompleteClasses, setIncompleteClasses] = useState<any[]>([]);
 
 
     const [viewDate, setViewDate] = useState(new Date());
@@ -206,11 +207,38 @@ const TeacherCalendar = () => {
         fetchInitial();
     }, [user]);
 
+    const checkIncompleteClasses = async (tId: string) => {
+    // 1. Lấy tất cả lớp của GV này đang dạy
+    const { data: classes } = await supabase
+        .from('classes')
+        .select('id, name, courses(duration)')
+        .eq('teacher_id', tId)
+        .neq('status', 'Kết thúc');
+
+    if (!classes) return;
+
+    // 2. Đếm số buổi đã xếp thực tế cho từng lớp
+    const results = await Promise.all(classes.map(async (cls: any) => {
+        const { count } = await supabase
+            .from('sessions')
+            .select('*', { count: 'exact', head: true })
+            .eq('class_id', cls.id);
+        
+        const total = cls.courses?.duration || 0;
+        const used = count || 0;
+        return { id: cls.id, name: cls.name, total, used, remaining: total - used };
+    }));
+
+    // 3. Chỉ lọc những lớp còn thiếu buổi (remaining > 0)
+    setIncompleteClasses(results.filter(r => r.remaining > 0));
+};
+
     useEffect(() => {
         if (selectedTeacherId) {
             fetchTeacherCalendar(selectedTeacherId);
             fetchTeacherClasses(selectedTeacherId);
             fetchLeadsToTest();
+            checkIncompleteClasses(selectedTeacherId);
         }
     }, [selectedTeacherId, viewDate]);
 
@@ -344,6 +372,7 @@ const TeacherCalendar = () => {
         } finally {
             setIsSaving(false);
         }
+        checkIncompleteClasses(selectedTeacherId);
     };
 
     // --- MỚI: ĐỒNG BỘ THÊM/SỬA ---
@@ -508,6 +537,7 @@ const TeacherCalendar = () => {
         } finally {
             setIsSaving(false);
         }
+        checkIncompleteClasses(selectedTeacherId);
     };
 
     const getBoxStyle = (start: string, end: string) => {
@@ -520,12 +550,12 @@ const TeacherCalendar = () => {
 
     return (
         <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden text-[13px]">
-            {/* TOP BAR */}
+            {/* 1. TOP BAR - Giữ nguyên của bạn */}
             <div className="flex items-center justify-between p-4 bg-white border-b shadow-sm z-[60] shrink-0">
                 <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
                         <div className="bg-orange-500 p-2 rounded-xl text-white shadow-lg shadow-orange-200"><CalendarIcon size={24} /></div>
-                        <span className="text-xl font-black uppercase italic tracking-tighter">Lịch Đào Tạo Pro</span>
+                        <span className="text-xl font-black uppercase italic tracking-tighter">Lịch Đào Tạo</span>
                     </div>
                     <div className="flex items-center bg-slate-100 p-1 rounded-xl">
                         <button onClick={() => setViewDate(new Date())} className="px-4 py-1.5 bg-white shadow-sm rounded-lg text-xs font-bold transition-all hover:text-orange-500">Hôm nay</button>
@@ -545,100 +575,123 @@ const TeacherCalendar = () => {
                 </div>
             </div>
 
-            {/* BODY */}
-            <div ref={scrollContainerRef} className="flex-1 overflow-auto custom-scrollbar relative bg-white">
-                <div className="min-w-[1100px] relative">
-                    <div className="flex sticky top-0 z-50 bg-white border-b">
-                        <div className="w-20 shrink-0 border-r bg-white"></div>
-                        {weekDays.map((day, i) => {
-                            const isToday = toDateString(day) === toDateString(new Date());
-                            return (
-                                <div key={i} className="flex-1 p-3 text-center border-r last:border-r-0 bg-white">
-                                    <p className={`text-[10px] font-black uppercase ${isToday ? 'text-orange-500' : 'text-slate-400'}`}>{DAYS_LABEL[i]}</p>
-                                    <div className={`mt-1 inline-flex w-9 h-9 items-center justify-center rounded-full text-lg font-black ${isToday ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-700'}`}>{day.getDate()}</div>
+            {/* 2. AREA CHÍNH */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+                
+                {/* --- THANH NHẮC NHỞ NGANG (GỌN GÀNG) --- */}
+                {incompleteClasses.length > 0 && (
+                    <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center gap-4 overflow-x-auto no-scrollbar shrink-0">
+                        <div className="flex items-center gap-2 text-amber-600 shrink-0">
+                            <AlertTriangle size={14} className="animate-bounce" />
+                            <span className="text-[10px] font-black uppercase tracking-wider">Cần xếp thêm lịch:</span>
+                        </div>
+                        <div className="flex gap-2">
+                            {incompleteClasses.map(cls => (
+                                <div key={cls.id} className="flex items-center gap-2 bg-white border border-amber-200 px-3 py-1 rounded-full shadow-sm shrink-0">
+                                    <span className="text-[11px] font-bold text-slate-700">{cls.name}</span>
+                                    <span className="bg-orange-500 text-white text-[9px] px-1.5 py-0.5 rounded-md font-black">-{cls.remaining}</span>
                                 </div>
-                            );
-                        })}
-                    </div>
-
-                    <div className="flex relative">
-                        <div className="w-20 shrink-0 sticky left-0 z-40 bg-white border-r shadow-sm">
-                            {HOURS.map(hour => (
-                                <div key={hour} className="h-[100px] text-[11px] font-bold text-slate-400 pr-3 text-right pt-2 border-b border-slate-50 bg-white">{hour}:00</div>
                             ))}
                         </div>
+                    </div>
+                )}
 
-                        <div className="flex flex-1 relative bg-white min-h-[2400px]">
-                            {toDateString(viewDate) === toDateString(new Date()) && (
-                                <div className="absolute left-0 right-0 z-30 flex items-center pointer-events-none" style={{ top: currentTimePos }}>
-                                    <div className="w-3 h-3 bg-red-500 rounded-full -ml-1.5 shadow-md"></div>
-                                    <div className="h-[2px] bg-red-400 flex-1"></div>
-                                </div>
-                            )}
-
-                            {weekDays.map((day, dayIdx) => {
-                                const dayStr = toDateString(day);
-                                const fixedSlots = profile?.fixed_schedule?.[DAYS_LABEL[dayIdx]] || [];
-
+                {/* 3. CALENDAR BODY - Bây giờ sẽ chiếm 100% chiều ngang */}
+                <div ref={scrollContainerRef} className="flex-1 overflow-auto custom-scrollbar relative bg-white">
+                    <div className="min-w-[1100px] relative">
+                        {/* Phần nội dung hiển thị các Thứ/Ngày */}
+                        <div className="flex sticky top-0 z-50 bg-white border-b">
+                            <div className="w-20 shrink-0 border-r bg-white"></div>
+                            {weekDays.map((day, i) => {
+                                const isToday = toDateString(day) === toDateString(new Date());
                                 return (
-                                    <div key={dayIdx} className="flex-1 border-r border-slate-100 relative group">
-                                        {Array.isArray(fixedSlots) && fixedSlots.map((slot: any, idx: number) => (
-                                            <div key={idx} style={getBoxStyle(slot.start, slot.end)} className="absolute left-0 right-0 bg-orange-500/[0.08] border-x border-orange-500/10 pointer-events-none z-0"></div>
-                                        ))}
-
-                                        {HOURS.map(hour => {
-                                            const daySlots = profile?.fixed_schedule?.[DAYS_LABEL[dayIdx]];
-                                            const isClickable = Array.isArray(daySlots) && daySlots.some((slot: any) => {
-                                                const s = timeToMins(slot.start);
-                                                const e = timeToMins(slot.end, true);
-                                                const c = hour * 60;
-                                                return c >= s && c < e;
-                                            });
-                                            const isPast = isPastDateTime(dayStr, `${String(hour).padStart(2, '0')}:00`);
-
-                                            return (
-                                                <div
-                                                    key={hour}
-                                                    onClick={() => (isClickable && !isPast) ? handleCellClick(day, hour) : null}
-                                                    className={`h-[100px] w-full border-b border-slate-50 transition-all relative z-10
-                                                        ${isClickable && !isPast ? 'cursor-pointer hover:bg-orange-500/5' : 'cursor-not-allowed'}
-                                                    `}
-                                                >
-                                                    {isClickable && !isPast && !sessions.some(s => s.date === dayStr && parseInt(s.start_time.split(':')[0]) === hour) && (
-                                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Plus size={18} className="text-orange-300" /></div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-
-                                        {sessions.filter(s => s.date === dayStr).map(session => {
-                                            const isPast = isPastDateTime(session.date, session.start_time);
-                                            const isTrial = !!session.lead_id;
-                                            return (
-                                                <div
-                                                    key={session.id} style={getBoxStyle(session.start_time, session.end_time)}
-                                                    className={`absolute left-1 right-1 rounded-xl p-2.5 shadow-lg z-20 border-l-4 flex flex-col justify-between overflow-hidden group transition-all 
-                                                        ${isPast ? 'bg-slate-300 border-slate-400 opacity-60 grayscale cursor-not-allowed' : isTrial ? 'bg-emerald-600 border-emerald-300' : 'bg-blue-600 border-blue-300 hover:z-30 cursor-pointer'}
-                                                    `}
-                                                    onClick={(e) => { e.stopPropagation(); !isPast && handleEditSession(session); }}
-                                                >
-                                                    <div className="overflow-hidden text-white leading-tight">
-                                                        <div className="flex items-center gap-1.5 mb-1 text-[9px] font-black uppercase leading-none opacity-80">
-                                                            {isTrial ? <FlaskConical size={10}/> : <BookOpen size={10}/>}
-                                                            <p className="truncate">{isTrial ? 'DẠY THỬ' : session.classes?.name}</p>
-                                                        </div>
-                                                        <p className="text-[10px] font-black truncate">{isTrial ? session.leads?.name : ''}</p>
-                                                        <div className="flex items-center gap-1 mt-0.5">
-                                                            {session.focus_type === 'Speaking' ? <Mic size={10}/> : <PencilLine size={10}/>}
-                                                            <span className="text-[9px] font-bold">{session.focus_type}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                                    <div key={i} className="flex-1 p-3 text-center border-r last:border-r-0 bg-white">
+                                        <p className={`text-[10px] font-black uppercase ${isToday ? 'text-orange-500' : 'text-slate-400'}`}>{DAYS_LABEL[i]}</p>
+                                        <div className={`mt-1 inline-flex w-9 h-9 items-center justify-center rounded-full text-lg font-black ${isToday ? 'bg-orange-500 text-white shadow-lg' : 'text-slate-700'}`}>{day.getDate()}</div>
                                     </div>
                                 );
                             })}
+                        </div>
+
+                        {/* Phần nội dung giờ giấc và lưới lịch */}
+                        <div className="flex relative">
+                            <div className="w-20 shrink-0 sticky left-0 z-40 bg-white border-r shadow-sm">
+                                {HOURS.map(hour => (
+                                    <div key={hour} className="h-[100px] text-[11px] font-bold text-slate-400 pr-3 text-right pt-2 border-b border-slate-50 bg-white">{hour}:00</div>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-1 relative bg-white min-h-[2400px]">
+                                {toDateString(viewDate) === toDateString(new Date()) && (
+                                    <div className="absolute left-0 right-0 z-30 flex items-center pointer-events-none" style={{ top: currentTimePos }}>
+                                        <div className="w-3 h-3 bg-red-500 rounded-full -ml-1.5 shadow-md"></div>
+                                        <div className="h-[2px] bg-red-400 flex-1"></div>
+                                    </div>
+                                )}
+
+                                {weekDays.map((day, dayIdx) => {
+                                    const dayStr = toDateString(day);
+                                    const fixedSlots = profile?.fixed_schedule?.[DAYS_LABEL[dayIdx]] || [];
+
+                                    return (
+                                        <div key={dayIdx} className="flex-1 border-r border-slate-100 relative group">
+                                            {Array.isArray(fixedSlots) && fixedSlots.map((slot: any, idx: number) => (
+                                                <div key={idx} style={getBoxStyle(slot.start, slot.end)} className="absolute left-0 right-0 bg-orange-500/[0.08] border-x border-orange-500/10 pointer-events-none z-0"></div>
+                                            ))}
+
+                                            {HOURS.map(hour => {
+                                                const daySlots = profile?.fixed_schedule?.[DAYS_LABEL[dayIdx]];
+                                                const isClickable = Array.isArray(daySlots) && daySlots.some((slot: any) => {
+                                                    const s = timeToMins(slot.start);
+                                                    const e = timeToMins(slot.end, true);
+                                                    const c = hour * 60;
+                                                    return c >= s && c < e;
+                                                });
+                                                const isPast = isPastDateTime(dayStr, `${String(hour).padStart(2, '0')}:00`);
+
+                                                return (
+                                                    <div
+                                                        key={hour}
+                                                        onClick={() => (isClickable && !isPast) ? handleCellClick(day, hour) : null}
+                                                        className={`h-[100px] w-full border-b border-slate-50 transition-all relative z-10
+                                                            ${isClickable && !isPast ? 'cursor-pointer hover:bg-orange-500/5' : 'cursor-not-allowed'}
+                                                        `}
+                                                    >
+                                                        {isClickable && !isPast && !sessions.some(s => s.date === dayStr && parseInt(s.start_time.split(':')[0]) === hour) && (
+                                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Plus size={18} className="text-orange-300" /></div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {sessions.filter(s => s.date === dayStr).map(session => {
+                                                const isPast = isPastDateTime(session.date, session.start_time);
+                                                const isTrial = !!session.lead_id;
+                                                return (
+                                                    <div
+                                                        key={session.id} style={getBoxStyle(session.start_time, session.end_time)}
+                                                        className={`absolute left-1 right-1 rounded-xl p-2.5 shadow-lg z-20 border-l-4 flex flex-col justify-between overflow-hidden group transition-all 
+                                                            ${isPast ? 'bg-slate-300 border-slate-400 opacity-60 grayscale cursor-not-allowed' : isTrial ? 'bg-emerald-600 border-emerald-300' : 'bg-blue-600 border-blue-300 hover:z-30 cursor-pointer'}
+                                                        `}
+                                                        onClick={(e) => { e.stopPropagation(); !isPast && handleEditSession(session); }}
+                                                    >
+                                                        <div className="overflow-hidden text-white leading-tight">
+                                                            <div className="flex items-center gap-1.5 mb-1 text-[9px] font-black uppercase leading-none opacity-80">
+                                                                {isTrial ? <FlaskConical size={10}/> : <BookOpen size={10}/>}
+                                                                <p className="truncate">{isTrial ? 'DẠY THỬ' : session.classes?.name}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-1 mt-0.5">
+                                                                {session.focus_type === 'Speaking' ? <Mic size={10}/> : <PencilLine size={10}/>}
+                                                                <span className="text-[9px] font-bold">{session.focus_type}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>

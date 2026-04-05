@@ -54,6 +54,21 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         };
     };
 
+    const canAttend = (session: any) => {
+        const now = new Date();
+        
+        // Tạo đối tượng Date cho thời điểm bắt đầu và kết thúc của buổi học
+        // Giả sử session.date có định dạng 'YYYY-MM-DD' và time là 'HH:mm'
+        const startTime = new Date(`${session.date}T${session.start_time}`);
+        const endTime = new Date(`${session.date}T${session.end_time}`);
+        
+        // Thời gian khóa là sau khi kết thúc 10 phút
+        const lockTime = new Date(endTime.getTime() + 10 * 60000);
+
+        // Trả về true nếu "bây giờ" nằm trong khoảng [Bắt đầu] -> [Kết thúc + 10ph]
+        return now >= startTime && now <= lockTime;
+    };
+
     // --- 2. EFFECTS (DATA FETCHING) ---
     const fetchInitialData = async () => {
         const { data: courseData } = await supabase.from('courses').select('duration').eq('id', courseId).single();
@@ -110,6 +125,19 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         setShowModal(true);
     };
 
+        // --- LOGIC KIỂM TRA THỜI GIAN VÀO PHÒNG HỌC (Trước 10ph -> Kết thúc) ---
+    const canEnterMeet = (session: any) => {
+        const now = new Date();
+        const startTime = new Date(`${session.date}T${session.start_time}`);
+        const endTime = new Date(`${session.date}T${session.end_time}`);
+        
+        // Mốc thời gian mở cửa phòng học: Trước giờ bắt đầu 10 phút
+        const openTime = new Date(startTime.getTime() - 10 * 60000);
+
+        // Cho phép vào từ lúc Open đến khi Kết thúc buổi học
+        return now >= openTime && now <= endTime;
+    };
+
     const handleOpenEdit = (cls: any) => {
         setModalType('edit');
         setFormData({
@@ -163,12 +191,17 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
         } catch (e) { alert("Lỗi xử lý!"); }
     };
 
-    const handleUpdateSessionStatus = async (sid: string, status: string) => {
-        await supabase.from('sessions').update({ status }).eq('id', sid);
-    };
-
     const getCompletedSessionsCount = () => {
         return sessions.filter(s => s.status !== 'Chưa diễn ra').length;
+    };
+
+    const handleUpdateSessionStatus = async (sid: string, status: string, session: any) => {
+        // Kiểm tra lại một lần nữa trước khi cập nhật (bảo mật phía client)
+        if (!canAttend(session) && status !== 'Chưa diễn ra') {
+            alert("Ngoài thời gian cho phép điểm danh (Chỉ được thao tác từ lúc bắt đầu đến sau khi kết thúc 10 phút)");
+            return;
+        }
+        await supabase.from('sessions').update({ status }).eq('id', sid);
     };
 
     // --- 4. RENDER ---
@@ -223,40 +256,85 @@ const ClassManagement = ({ courseId, courseTitle, isDirectClass, onBack }: Class
                             {sessions.length === 0 ? (
                                 <div className="p-20 text-center text-slate-400 font-medium italic">Chưa có buổi học nào được đặt lịch.</div>
                             ) : (
-                                sessions.map((s, idx) => (
-                                    <div key={s.id} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between hover:bg-slate-50/50 transition-all group gap-4">
-                                        <div className="flex items-center gap-6">
-                                            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex flex-col items-center justify-center group-hover:bg-orange-500 transition-colors shadow-sm">
-                                                <span className="text-[8px] font-black uppercase opacity-60">Buổi</span>
-                                                <span className="text-lg font-black">{idx + 1}</span>
+                                sessions.map((s, idx) => {
+                                    const isTimeForAttendance = canAttend(s);
+                                    const isTimeForMeet = canEnterMeet(s);
+                                    
+                                    return (
+                                        <div key={s.id} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between hover:bg-slate-50/50 transition-all group gap-4">
+                                            <div className="flex items-center gap-6">
+                                                <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex flex-col items-center justify-center group-hover:bg-orange-500 transition-colors shadow-sm">
+                                                    <span className="text-[8px] font-black uppercase opacity-60">Buổi</span>
+                                                    <span className="text-lg font-black">{idx + 1}</span>
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-slate-700 uppercase text-sm">{new Date(s.date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })}</p>
+                                                    <p className="text-[11px] font-bold text-orange-500 mt-1 italic tracking-tight flex items-center gap-1"><Clock size={12}/> {s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-black text-slate-700 uppercase text-sm">{new Date(s.date).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' })}</p>
-                                                <p className="text-[11px] font-bold text-orange-500 mt-1 italic tracking-tight flex items-center gap-1"><Clock size={12}/> {s.start_time?.slice(0,5)} – {s.end_time?.slice(0,5)}</p>
-                                            </div>
-                                        </div>
 
-                                        <div className="flex flex-wrap gap-2 items-center w-full md:w-auto justify-end">
+                                            <div className="flex flex-wrap gap-2 items-center w-full md:w-auto justify-end">
+                                            {/* LOGIC NÚT VÀO PHÒNG HỌC */}
                                             {s.meet_link ? (
-                                                <a href={s.meet_link} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase border border-blue-500 hover:bg-blue-700 transition-all shadow-md active:scale-95"><Video size={14}/> Vào phòng học</a>
+                                                isTimeForMeet ? (
+                                                    <a href={s.meet_link} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase border border-blue-500 hover:bg-blue-700 transition-all shadow-md active:scale-95">
+                                                        <Video size={14}/> Vào phòng học
+                                                    </a>
+                                                ) : (
+                                                    <span className="flex items-center gap-2 px-5 py-2.5 bg-slate-200 text-slate-400 rounded-xl font-black text-[10px] uppercase border border-slate-300 cursor-not-allowed">
+                                                        <Video size={14}/> Vào phòng học
+                                                    </span>
+                                                )
                                             ) : (
                                                 <span className="text-[9px] font-bold text-slate-300 uppercase italic px-3 border border-dashed border-slate-200 py-2 rounded-xl">Chưa có link Meet</span>
                                             )}
 
-                                            {s.status === 'Chưa diễn ra' ? (
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => handleUpdateSessionStatus(s.id, 'Đã điểm danh')} className="px-4 py-2.5 bg-emerald-500 text-white text-[10px] font-black rounded-xl hover:bg-emerald-600 transition-all shadow-sm">Điểm danh</button>
-                                                    <button onClick={() => handleUpdateSessionStatus(s.id, 'Vắng')} className="px-4 py-2.5 bg-red-500 text-white text-[10px] font-black rounded-xl hover:bg-red-600 transition-all shadow-sm">Báo vắng</button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase border shadow-sm ${s.status === 'Đã điểm danh' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>{s.status}</span>
-                                                    <button onClick={() => handleUpdateSessionStatus(s.id, 'Chưa diễn ra')} className="p-2 text-slate-300 hover:text-orange-500 transition-all" title="Sửa lại"><RotateCcw size={18}/></button>
-                                                </div>
-                                            )}
+                                                {/* LOGIC ĐIỂM DANH / BÁO VẮNG */}
+                                                {s.status === 'Chưa diễn ra' ? (
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            disabled={!isTimeForAttendance}
+                                                            onClick={() => handleUpdateSessionStatus(s.id, 'Đã điểm danh', s)} 
+                                                            className={`px-4 py-2.5 text-[10px] font-black rounded-xl transition-all shadow-sm 
+                                                                ${isTimeForAttendance 
+                                                                    ? 'bg-emerald-500 text-white hover:bg-emerald-600' 
+                                                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                                        >
+                                                            Điểm danh
+                                                        </button>
+                                                        <button 
+                                                            disabled={!isTimeForAttendance}
+                                                            onClick={() => handleUpdateSessionStatus(s.id, 'Vắng', s)} 
+                                                            className={`px-4 py-2.5 text-[10px] font-black rounded-xl transition-all shadow-sm 
+                                                                ${isTimeForAttendance 
+                                                                    ? 'bg-red-500 text-white hover:bg-red-600' 
+                                                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                                        >
+                                                            Báo vắng
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase border shadow-sm ${s.status === 'Đã điểm danh' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                                                            {s.status}
+                                                        </span>
+                                                        
+                                                        {/* Nút Reset chỉ hiện nếu trong khung giờ cho phép */}
+                                                        {isTimeForAttendance && (
+                                                            <button 
+                                                                onClick={() => handleUpdateSessionStatus(s.id, 'Chưa diễn ra', s)} 
+                                                                className="p-2 text-slate-300 hover:text-orange-500 transition-all" 
+                                                                title="Sửa lại"
+                                                            >
+                                                                <RotateCcw size={18}/>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>
